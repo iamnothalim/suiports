@@ -356,7 +356,7 @@ export default function SportsNewsApp() {
         setScoringStatus(
           `Completed! Selected: ${
             result.selected_prediction?.game_id || "None"
-          }`
+          } (Deleted: ${result.deleted_count || 0})`
         );
         setScoringProgress(100);
 
