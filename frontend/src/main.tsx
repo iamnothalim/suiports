@@ -75,6 +75,9 @@ export default function SportsNewsApp() {
   const [statsTab, setStatsTab] = useState("team")
   const [predictions, setPredictions] = useState<any[]>([])
   const [predictionScores, setPredictionScores] = useState<any[]>([])
+  const [isBatchScoring, setIsBatchScoring] = useState(false)
+  const [scoringProgress, setScoringProgress] = useState(0)
+  const [scoringStatus, setScoringStatus] = useState('')
 
   // 인증 상태
   const { user, logout } = useAuth()
@@ -104,13 +107,13 @@ export default function SportsNewsApp() {
       if (response.ok) {
         const data = await response.json()
         setPredictions(data)
-        console.log('백엔드에서 예측 이벤트 로드 성공:', data)
+        console.log('Backend prediction event load success:', data)
       } else {
-        console.error('예측 이벤트 로드 실패:', response.status)
+        console.error('Prediction event load failed:', response.status)
         setPredictions([])
       }
     } catch (error) {
-      console.error('예측 이벤트 로드 오류:', error)
+      console.error('Prediction event load error:', error)
       setPredictions([])
     }
   }
@@ -171,13 +174,13 @@ export default function SportsNewsApp() {
             scores.push(score)
           } else if (response.status === 404) {
             // 점수가 없는 예측은 무시
-            console.log(`점수가 없는 예측 ID: ${prediction.id}`)
+            console.log(`Score not found for prediction ID: ${prediction.id}`)
           } else {
-            console.error(`점수 조회 실패 - 예측 ID: ${prediction.id}, 상태: ${response.status}`)
+            console.error(`Score lookup failed - prediction ID: ${prediction.id}, status: ${response.status}`)
           }
         } catch (error) {
           // 개별 점수 조회 오류는 무시하고 계속 진행
-          console.log(`점수 조회 오류 - 예측 ID: ${prediction.id}:`, error)
+          console.log(`Score lookup error - prediction ID: ${prediction.id}:`, error)
         }
       }
       
@@ -216,6 +219,57 @@ export default function SportsNewsApp() {
     } catch (error) {
       console.error('AI 점수 계산 오류:', error)
       alert('AI 점수 계산 중 오류가 발생했습니다.')
+    }
+  }
+
+  // 일괄 AI 점수 계산 함수
+  const batchCalculateAIScores = async () => {
+    try {
+      const token = localStorage.getItem('access_token')
+      if (!token) {
+        alert('Login required.')
+        return
+      }
+
+      setIsBatchScoring(true)
+      setScoringProgress(0)
+      setScoringStatus('Starting batch scoring...')
+
+      const response = await fetch('http://localhost:8000/api/v1/scoring/batch-calculate', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      
+      if (response.ok) {
+        const scores = await response.json()
+        setScoringStatus(`Calculated ${scores.length} scores successfully!`)
+        setScoringProgress(100)
+        
+        // 기존 점수들과 새로 계산된 점수들을 합치기
+        setPredictionScores(prev => {
+          const existingIds = new Set(prev.map(s => s.prediction_id))
+          const newScores = scores.filter(s => !existingIds.has(s.prediction_id))
+          return [...prev, ...newScores]
+        })
+        
+        setTimeout(() => {
+          setIsBatchScoring(false)
+          setScoringProgress(0)
+          setScoringStatus('')
+        }, 2000)
+      } else {
+        const errorData = await response.json()
+        console.error('Batch scoring failed:', errorData)
+        setScoringStatus(`Batch scoring failed: ${errorData.detail || 'Unknown error'}`)
+        setIsBatchScoring(false)
+      }
+    } catch (error) {
+      console.error('Batch scoring error:', error)
+      setScoringStatus('Batch scoring error occurred')
+      setIsBatchScoring(false)
     }
   }
 
@@ -425,7 +479,7 @@ export default function SportsNewsApp() {
                   : "text-gray-500 border-transparent hover:text-gray-700"
               }`}
             >
-              팀 순위
+              Team Rankings
             </button>
             <button
               onClick={() => setStatsTab("record")}
@@ -454,7 +508,7 @@ export default function SportsNewsApp() {
         <div className="bg-white w-full">
           <div className="px-6 py-4 w-full">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              팀 순위 <span className="text-xs text-gray-500">ⓘ</span>
+              Team Rankings <span className="text-xs text-gray-500">ⓘ</span>
             </h3>
           </div>
 
@@ -520,7 +574,7 @@ export default function SportsNewsApp() {
 
                 {/* 최근 경기 결과 */}
                 <div className="mt-3 flex items-center gap-2">
-                  <span className="text-xs text-gray-500">최근 5경기:</span>
+                  <span className="text-xs text-gray-500">Recent 5 Games:</span>
                   <div className="flex gap-1">
                     {team.form.map((result, index) => (
                       <div
@@ -635,7 +689,36 @@ export default function SportsNewsApp() {
     return (
       <div className="pb-20 relative w-full">
         <div className="bg-white border-b border-gray-200 p-6 w-full">
-          <h1 className="text-2xl font-bold text-gray-900 mb-6">🔧 Admin Panel</h1>
+          <div className="flex justify-between items-center mb-6">
+            <h1 className="text-2xl font-bold text-gray-900">🔧 Admin Panel</h1>
+            
+            {/* 일괄 스코어링 버튼 */}
+            <div className="flex items-center gap-4">
+              {isBatchScoring && (
+                <div className="flex items-center gap-3">
+                  <div className="w-48 bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                      style={{ width: `${scoringProgress}%` }}
+                    ></div>
+                  </div>
+                  <span className="text-sm text-gray-600">{scoringStatus}</span>
+                </div>
+              )}
+              
+              <button
+                onClick={batchCalculateAIScores}
+                disabled={isBatchScoring}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  isBatchScoring 
+                    ? 'bg-gray-400 text-white cursor-not-allowed' 
+                    : 'bg-gradient-to-r from-purple-500 to-blue-500 text-white hover:from-purple-600 hover:to-blue-600'
+                }`}
+              >
+                {isBatchScoring ? '🔄 Processing...' : '🤖 Batch AI Scoring'}
+              </button>
+            </div>
+          </div>
           
           {/* 대기 중인 예측 이벤트 */}
           <div className="mb-8">
@@ -794,17 +877,32 @@ export default function SportsNewsApp() {
 
           {/* 승인된 예측 이벤트 */}
           <div>
-            <h2 className="text-lg font-bold text-gray-900 mb-4">✅ Approved Prediction Events</h2>
+            <h2 className="text-lg font-bold text-gray-900 mb-4">✅ Approved Prediction Events (Ranked by AI Score)</h2>
             {approvedPredictions.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 <p>No approved prediction events.</p>
               </div>
             ) : (
               <div className="space-y-4">
-                {approvedPredictions.map((prediction: any) => (
+                {approvedPredictions
+                  .map((prediction: any) => {
+                    const score = predictionScores.find(s => s.prediction_id === parseInt(prediction.id))
+                    return { ...prediction, aiScore: score?.total_score || 0 }
+                  })
+                  .sort((a, b) => b.aiScore - a.aiScore)
+                  .map((prediction: any, index: number) => (
                   <div key={prediction.id} className="border border-green-200 rounded-lg p-4 bg-green-50">
                     <div className="flex justify-between items-start mb-3">
                       <div className="flex items-center gap-2">
+                        {/* 순위 표시 */}
+                        <span className={`px-2 py-1 rounded text-xs font-bold ${
+                          index === 0 ? 'bg-yellow-100 text-yellow-800' :
+                          index === 1 ? 'bg-gray-100 text-gray-800' :
+                          index === 2 ? 'bg-orange-100 text-orange-800' :
+                          'bg-blue-100 text-blue-800'
+                        }`}>
+                          #{index + 1}
+                        </span>
                         <span className="bg-blue-100 text-blue-600 px-2 py-1 rounded text-xs font-medium">
                           {prediction.game_id}
                         </span>
@@ -812,8 +910,14 @@ export default function SportsNewsApp() {
                           by {prediction.creator}
                         </span>
                         <span className="bg-green-100 text-green-600 px-2 py-1 rounded text-xs font-medium">
-                          승인됨
+                          Approved
                         </span>
+                        {/* AI 점수 표시 */}
+                        {prediction.aiScore > 0 && (
+                          <span className="bg-purple-100 text-purple-600 px-2 py-1 rounded text-xs font-medium">
+                            AI: {prediction.aiScore.toFixed(1)}
+                          </span>
+                        )}
                       </div>
                       <span className="text-xs text-gray-500">
                         {new Date(prediction.createdAt).toLocaleString()}
@@ -855,7 +959,7 @@ export default function SportsNewsApp() {
                           <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-3 rounded-lg border border-green-200">
                             <div className="flex items-center justify-between mb-2">
                               <h4 className="text-sm font-medium text-green-900 flex items-center gap-2">
-                                🤖 AI 평가 점수
+                                🤖 AI Evaluation Score
                                 <span className="text-xs bg-green-200 text-green-800 px-2 py-1 rounded-full">
                                   완료
                                 </span>
@@ -867,31 +971,31 @@ export default function SportsNewsApp() {
                             
                             <div className="grid grid-cols-5 gap-1 mb-2">
                               <div className="text-center">
-                                <div className="text-xs font-medium text-gray-600 mb-1">품질</div>
+                                <div className="text-xs font-medium text-gray-600 mb-1">Quality</div>
                                 <div className={`px-1 py-1 rounded text-xs font-bold ${getScoreColor(score.quality_score)}`}>
                                   {score.quality_score}
                                 </div>
                               </div>
                               <div className="text-center">
-                                <div className="text-xs font-medium text-gray-600 mb-1">수요</div>
+                                <div className="text-xs font-medium text-gray-600 mb-1">Demand</div>
                                 <div className={`px-1 py-1 rounded text-xs font-bold ${getScoreColor(score.demand_score)}`}>
                                   {score.demand_score}
                                 </div>
                               </div>
                               <div className="text-center">
-                                <div className="text-xs font-medium text-gray-600 mb-1">신뢰</div>
+                                <div className="text-xs font-medium text-gray-600 mb-1">Reputation</div>
                                 <div className={`px-1 py-1 rounded text-xs font-bold ${getScoreColor(score.reputation_score)}`}>
                                   {score.reputation_score}
                                 </div>
                               </div>
                               <div className="text-center">
-                                <div className="text-xs font-medium text-gray-600 mb-1">선점</div>
+                                <div className="text-xs font-medium text-gray-600 mb-1">Novelty</div>
                                 <div className={`px-1 py-1 rounded text-xs font-bold ${getScoreColor(score.novelty_score)}`}>
                                   {score.novelty_score}
                                 </div>
                               </div>
                               <div className="text-center">
-                                <div className="text-xs font-medium text-gray-600 mb-1">경제</div>
+                                <div className="text-xs font-medium text-gray-600 mb-1">Economic</div>
                                 <div className={`px-1 py-1 rounded text-xs font-bold ${getScoreColor(score.economic_score)}`}>
                                   {score.economic_score}
                                 </div>
@@ -920,7 +1024,7 @@ export default function SportsNewsApp() {
       <div className="pb-20 relative w-full">
         <div className="bg-white border-b border-gray-200 p-4 w-full">
           <div className="flex justify-between items-center">
-            <h2 className="text-xl font-bold text-gray-900">🎯 예측 게임</h2>
+            <h2 className="text-xl font-bold text-gray-900">🎯 Betting Game</h2>
             {isLoggedIn ? (
               <button 
                 onClick={() => setShowCreatePredictionModal(true)}
@@ -1410,9 +1514,9 @@ export default function SportsNewsApp() {
             <div className="flex items-center gap-8">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 bg-[#00C28C] rounded-full flex items-center justify-center">
-                  <span className="text-white font-bold text-sm">스</span>
+                  <span className="text-white font-bold text-sm">Sui</span>
                 </div>
-                <h1 className="text-xl font-bold text-gray-900">스플</h1>
+                <h1 className="text-xl font-bold text-gray-900">Suiports</h1>
               </div>
             </div>
 
@@ -1455,7 +1559,7 @@ export default function SportsNewsApp() {
                     : "text-gray-600 hover:text-gray-900"
                 }`}
               >
-                예측 게임
+                Betting Game
                 <span className="absolute -top-2 -right-3 bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full font-bold my-[-10px] mx-[-6px]">
                   HOT
                 </span>
