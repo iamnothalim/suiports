@@ -136,7 +136,7 @@ export default function SportsNewsApp() {
       if (response.ok) {
         const newPrediction = await response.json()
         setPredictions(prev => [...prev, newPrediction])
-        alert('예측 이벤트가 성공적으로 생성되었습니다! Admin 승인 후 예측 게임 탭에 표시됩니다.')
+        alert('Prediction event created successfully! It will appear in the Prediction Game tab after admin approval.')
       } else {
         const errorData = await response.json()
         console.error('예측 이벤트 생성 실패:', errorData)
@@ -290,11 +290,11 @@ export default function SportsNewsApp() {
     dayBeforeYesterday.setDate(dayBeforeYesterday.getDate() - 2)
 
     if (dateString === today.toISOString().split("T")[0]) {
-      return "오늘, 2025년 8월 12일 화요일"
+      return "Today, August 12, 2025 Tuesday"
     } else if (dateString === yesterday.toISOString().split("T")[0]) {
-      return "어제, 2025년 8월 11일 월요일"
+      return "Yesterday, August 11, 2025 Monday"
     } else if (dateString === dayBeforeYesterday.toISOString().split("T")[0]) {
-      return "그제, 2025년 8월 10일 일요일"
+      return "Day before yesterday, August 10, 2025 Sunday"
     } else {
       const options: Intl.DateTimeFormatOptions = {
         year: "numeric",
@@ -400,7 +400,7 @@ export default function SportsNewsApp() {
           </div>
         </div>
 
-        {/* 시즌 정보 */}
+        {/* Season Information */}
         <div className="bg-white px-6 py-4 border-b border-gray-200 w-full">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -745,7 +745,7 @@ export default function SportsNewsApp() {
                               </div>
                               
                               <div className="bg-white p-3 rounded border text-xs text-gray-700">
-                                <div className="font-medium text-gray-800 mb-1">📊 AI 분석 결과:</div>
+                                <div className="font-medium text-gray-800 mb-1">📊 AI Analysis Result:</div>
                                 <div className="leading-relaxed">
                                   {score.ai_reasoning}
                                 </div>
@@ -991,7 +991,7 @@ export default function SportsNewsApp() {
                             setShowLoginModal(true)
                           } else {
                             // 베팅 로직 구현
-                            alert(`${prediction.option_a}에 베팅하시겠습니까?`)
+                            alert(`Would you like to bet on ${prediction.option_a}?`)
                           }
                         }}
                       >
@@ -1005,7 +1005,7 @@ export default function SportsNewsApp() {
                             setShowLoginModal(true)
                           } else {
                             // 베팅 로직 구현
-                            alert(`${prediction.option_b}에 베팅하시겠습니까?`)
+                            alert(`Would you like to bet on ${prediction.option_b}?`)
                           }
                         }}
                       >
@@ -1214,23 +1214,23 @@ export default function SportsNewsApp() {
             <div className="space-y-4">
               {[
                 {
-                  author: "축구광팬",
-                  time: "2시간 전",
-                  content: "정말 좋은 분석이네요! 저도 비슷하게 생각하고 있었습니다.",
+                  author: "FootballFan",
+                  time: "2 hours ago",
+                  content: "Great analysis! I was thinking similarly.",
                   likes: 5,
                   avatar: "⚽",
                 },
                 {
-                  author: "프리미어매니아",
-                  time: "4시간 전",
-                  content: "손흥민 폼이 정말 좋아 보이긴 하는데, 아스날도 만만치 않을 것 같아요.",
+                  author: "PremierLeagueMania",
+                  time: "4 hours ago",
+                  content: "Son Heung-min's form looks really good, but Arsenal won't be easy either.",
                   likes: 3,
                   avatar: "🏆",
                 },
                 {
-                  author: "토트넘러버",
-                  time: "6시간 전",
-                  content: "이번 시즌 토트넘 기대됩니다! COYS!",
+                  author: "TottenhamLover",
+                  time: "6 hours ago",
+                  content: "Looking forward to Tottenham this season! COYS!",
                   likes: 8,
                   avatar: "🐓",
                 },
@@ -1264,12 +1264,12 @@ export default function SportsNewsApp() {
     return (
       <div className="pb-20 relative w-full">
         <div className="bg-white border-b border-gray-200 p-6 w-full">
-          <h2 className="text-lg font-bold mb-4 text-gray-900">🔥 실시간 인기글</h2>
+          <h2 className="text-lg font-bold mb-4 text-gray-900">🔥 Trending Posts</h2>
           <div className="space-y-3">
             {[
-              { title: "손흥민 골든부트 가능성은?", author: "축구매니아", time: "2시간 전", likes: 156 },
-              { title: "이강인 PSG 적응기 어떻게 보시나요", author: "파리지앵", time: "4시간 전", likes: 89 },
-              { title: "김민재 바이에른 이적 후 근황", author: "분데스리가팬", time: "6시간 전", likes: 67 },
+              { title: "Can Son Heung-min win the Golden Boot?", author: "FootballMania", time: "2 hours ago", likes: 156 },
+              { title: "How do you see Lee Kang-in's adaptation at PSG?", author: "Parisian", time: "4 hours ago", likes: 89 },
+              { title: "Kim Min-jae's current status after Bayern transfer", author: "BundesligaFan", time: "6 hours ago", likes: 67 },
             ].map((post, index) => (
               <div key={index} className="flex items-center justify-between py-2">
                 <div className="flex items-center gap-3">
@@ -1290,50 +1290,50 @@ export default function SportsNewsApp() {
           {[
             {
               id: 1,
-              author: "손흥민팬",
-              time: "7시간 전",
-              badge: "수정됨",
-              title: "토트넘 vs 아스날 더비 예상",
+              author: "SonHeungminFan",
+              time: "7 hours ago",
+              badge: "Edited",
+              title: "Tottenham vs Arsenal Derby Prediction",
               content:
-                "이번 노스런던 더비 어떻게 보시나요?\n\n손흥민 컨디션도 좋고 케인 없어도 충분히 이길 수 있을 것 같은데",
+                "How do you see this North London derby?\n\nSon Heung-min's condition is good and I think we can win even without Kane",
               likes: 15,
               comments: 8,
               avatar: "⚽",
             },
             {
               id: 2,
-              author: "맨유매니아",
-              time: "3일 전",
-              title: "텐하흐 감독 전술 변화... 이번 시즌 기대됩니다",
+              author: "ManUnitedMania",
+              time: "3 days ago",
+              title: "Ten Hag's tactical changes... Looking forward to this season",
               likes: 23,
               comments: 12,
               avatar: "🔴",
             },
             {
               id: 3,
-              author: "리버풀러버",
-              time: "20시간 전",
-              title: "살라 재계약 소식 언제 나올까요?",
-              content: "계속 미뤄지고 있는데 걱정이네요",
+              author: "LiverpoolLover",
+              time: "20 hours ago",
+              title: "When will Salah's contract renewal news come out?",
+              content: "It keeps getting delayed, I'm worried",
               likes: 31,
               comments: 5,
               avatar: "🔴",
             },
             {
               id: 4,
-              author: "첼시팬",
-              time: "1일 전",
-              title: "포체티노 감독 체제 어떻게 생각하세요?",
-              content: "아직 적응 기간이겠지만 기대가 큽니다",
+              author: "ChelseaFan",
+              time: "1 day ago",
+              title: "What do you think about Pochettino's system?",
+              content: "It's still an adaptation period but I have high expectations",
               likes: 18,
               comments: 15,
               avatar: "🔵",
             },
             {
               id: 5,
-              author: "시티즌",
-              time: "2일 전",
-              title: "홀란드 득점 기록 경신 가능할까요?",
+              author: "Citizen",
+              time: "2 days ago",
+              title: "Can Haaland break the scoring record?",
               likes: 42,
               comments: 7,
               avatar: "💙",
@@ -1525,7 +1525,7 @@ export default function SportsNewsApp() {
               <input
                 name="email"
                 type="email"
-                placeholder="이메일 주소"
+                placeholder="Email address"
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00C28C]"
                 required
               />
