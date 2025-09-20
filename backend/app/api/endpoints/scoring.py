@@ -165,7 +165,7 @@ async def batch_calculate_scores(
             
             db.add(db_score)
             calculated_scores.append(db_score)
-            
+            time.sleep(1)
         except Exception as e:
             print(f"Error calculating score for prediction {prediction.id}: {e}")
             continue
