@@ -139,6 +139,20 @@ export default function SportsNewsApp() {
         return;
       }
 
+      // 지갑 연결 확인
+      if (!isConnected || !address) {
+        alert(
+          "지갑을 연결해주세요. 예측 이벤트 생성에는 지갑 연결이 필요합니다."
+        );
+        return;
+      }
+
+      // 지갑 주소 추가
+      const predictionDataWithAddress = {
+        ...predictionData,
+        user_address: address,
+      };
+
       const response = await fetch(
         "http://localhost:8000/api/v1/predictions/",
         {
@@ -147,7 +161,7 @@ export default function SportsNewsApp() {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(predictionData),
+          body: JSON.stringify(predictionDataWithAddress),
         }
       );
 
@@ -316,71 +330,80 @@ export default function SportsNewsApp() {
   // 일괄 스코어링 및 자동 선택 함수
   const batchCalculateAndSelectBest = async () => {
     try {
-      const token = localStorage.getItem('access_token')
+      const token = localStorage.getItem("access_token");
       if (!token) {
-        alert('Login required.')
-        return
+        alert("Login required.");
+        return;
       }
 
-      setIsBatchScoring(true)
-      setScoringProgress(0)
-      setScoringStatus('Starting batch scoring and selection...')
+      setIsBatchScoring(true);
+      setScoringProgress(0);
+      setScoringStatus("Starting batch scoring and selection...");
 
-      const response = await fetch('http://localhost:8000/api/v1/scoring/batch-calculate-and-select', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
+      const response = await fetch(
+        "http://localhost:8000/api/v1/scoring/batch-calculate-and-select",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
         }
-      })
-      
+      );
+
       if (response.ok) {
-        const result = await response.json()
-        setScoringStatus(`Completed! Selected: ${result.selected_prediction?.game_id || 'None'}`)
-        setScoringProgress(100)
-        
+        const result = await response.json();
+        setScoringStatus(
+          `Completed! Selected: ${
+            result.selected_prediction?.game_id || "None"
+          }`
+        );
+        setScoringProgress(100);
+
         if (result.selected_prediction) {
-          setSelectedPrediction(result.selected_prediction)
-          setShowSelectionResult(true)
-          
+          setSelectedPrediction(result.selected_prediction);
+          setShowSelectionResult(true);
+
           // 기존 점수들과 새로 계산된 점수들을 합치기
-          setPredictionScores(prev => {
-            const existingIds = new Set(prev.map(s => s.prediction_id))
-            const newScores = result.calculated_scores.map((score: any) => ({
-              prediction_id: score.prediction_id,
-              total_score: score.total_score,
-              // 다른 필드들은 기본값으로 설정
-              quality_score: 0,
-              demand_score: 0,
-              reputation_score: 0,
-              novelty_score: 0,
-              economic_score: 0
-            })).filter((s: any) => !existingIds.has(s.prediction_id))
-            return [...prev, ...newScores]
-          })
-          
+          setPredictionScores((prev) => {
+            const existingIds = new Set(prev.map((s) => s.prediction_id));
+            const newScores = result.calculated_scores
+              .map((score: any) => ({
+                prediction_id: score.prediction_id,
+                total_score: score.total_score,
+                // 다른 필드들은 기본값으로 설정
+                quality_score: 0,
+                demand_score: 0,
+                reputation_score: 0,
+                novelty_score: 0,
+                economic_score: 0,
+              }))
+              .filter((s: any) => !existingIds.has(s.prediction_id));
+            return [...prev, ...newScores];
+          });
+
           // 예측 목록 새로고침
-          loadPredictions()
+          loadPredictions();
         }
-        
+
         setTimeout(() => {
-          setIsBatchScoring(false)
-          setScoringProgress(0)
-          setScoringStatus('')
-          setShowSelectionResult(false)
-        }, 3000)
+          setIsBatchScoring(false);
+          setScoringProgress(0);
+          setScoringStatus("");
+          setShowSelectionResult(false);
+        }, 3000);
       } else {
-        const errorData = await response.json()
-        console.error('Batch scoring and selection failed:', errorData)
-        setScoringStatus(`Failed: ${errorData.detail || 'Unknown error'}`)
-        setIsBatchScoring(false)
+        const errorData = await response.json();
+        console.error("Batch scoring and selection failed:", errorData);
+        setScoringStatus(`Failed: ${errorData.detail || "Unknown error"}`);
+        setIsBatchScoring(false);
       }
     } catch (error) {
-      console.error('Batch scoring and selection error:', error)
-      setScoringStatus('Error occurred during batch processing')
-      setIsBatchScoring(false)
+      console.error("Batch scoring and selection error:", error);
+      setScoringStatus("Error occurred during batch processing");
+      setIsBatchScoring(false);
     }
-  }
+  };
 
   // Load prediction events when login status changes
   React.useEffect(() => {
@@ -859,7 +882,7 @@ export default function SportsNewsApp() {
         <div className="bg-white border-b border-gray-200 p-6 w-full">
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-2xl font-bold text-gray-900">🔧 Admin Panel</h1>
-            
+
             {/* 일괄 스코어링 버튼들 */}
             <div className="flex items-center gap-4">
               {isBatchScoring && (
@@ -873,40 +896,48 @@ export default function SportsNewsApp() {
                   <span className="text-sm text-gray-600">{scoringStatus}</span>
                 </div>
               )}
-              
+
               {showSelectionResult && selectedPrediction && (
                 <div className="bg-green-100 border border-green-300 rounded-lg p-3">
                   <div className="flex items-center gap-2">
-                    <span className="text-green-600 font-bold">🏆 Selected:</span>
-                    <span className="text-green-800 font-medium">{selectedPrediction.game_id}</span>
-                    <span className="text-green-600 text-sm">(Score: {selectedPrediction.total_score.toFixed(1)})</span>
+                    <span className="text-green-600 font-bold">
+                      🏆 Selected:
+                    </span>
+                    <span className="text-green-800 font-medium">
+                      {selectedPrediction.game_id}
+                    </span>
+                    <span className="text-green-600 text-sm">
+                      (Score: {selectedPrediction.total_score.toFixed(1)})
+                    </span>
                   </div>
                 </div>
               )}
-              
+
               <div className="flex gap-2">
                 <button
                   onClick={batchCalculateAIScores}
                   disabled={isBatchScoring}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                    isBatchScoring 
-                      ? 'bg-gray-400 text-white cursor-not-allowed' 
-                      : 'bg-gradient-to-r from-purple-500 to-blue-500 text-white hover:from-purple-600 hover:to-blue-600'
+                    isBatchScoring
+                      ? "bg-gray-400 text-white cursor-not-allowed"
+                      : "bg-gradient-to-r from-purple-500 to-blue-500 text-white hover:from-purple-600 hover:to-blue-600"
                   }`}
                 >
-                  {isBatchScoring ? '🔄 Processing...' : '🤖 Batch Scoring'}
+                  {isBatchScoring ? "🔄 Processing..." : "🤖 Batch Scoring"}
                 </button>
-                
+
                 <button
                   onClick={batchCalculateAndSelectBest}
                   disabled={isBatchScoring}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                    isBatchScoring 
-                      ? 'bg-gray-400 text-white cursor-not-allowed' 
-                      : 'bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:from-green-600 hover:to-emerald-600'
+                    isBatchScoring
+                      ? "bg-gray-400 text-white cursor-not-allowed"
+                      : "bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:from-green-600 hover:to-emerald-600"
                   }`}
                 >
-                  {isBatchScoring ? '🔄 Processing...' : '🎯 Score & Auto-Select'}
+                  {isBatchScoring
+                    ? "🔄 Processing..."
+                    : "🎯 Score & Auto-Select"}
                 </button>
               </div>
             </div>
@@ -934,6 +965,12 @@ export default function SportsNewsApp() {
                         </span>
                         <span className="text-xs text-gray-500">
                           by {prediction.creator}
+                          {prediction.user_address && (
+                            <span className="ml-1 text-blue-600">
+                              ({prediction.user_address.slice(0, 6)}...
+                              {prediction.user_address.slice(-4)})
+                            </span>
+                          )}
                         </span>
                         <span className="bg-yellow-100 text-yellow-600 px-2 py-1 rounded text-xs font-medium">
                           대기중
@@ -1170,6 +1207,12 @@ export default function SportsNewsApp() {
                           </span>
                           <span className="text-xs text-gray-500">
                             by {prediction.creator}
+                            {prediction.user_address && (
+                              <span className="ml-1 text-blue-600">
+                                ({prediction.user_address.slice(0, 6)}...
+                                {prediction.user_address.slice(-4)})
+                              </span>
+                            )}
                           </span>
                           <span className="bg-green-100 text-green-600 px-2 py-1 rounded text-xs font-medium">
                             Approved
@@ -1342,12 +1385,21 @@ export default function SportsNewsApp() {
           <div className="flex justify-between items-center">
             <h2 className="text-xl font-bold text-gray-900">🎯 Betting Game</h2>
             {isLoggedIn ? (
-              <button
-                onClick={() => setShowCreatePredictionModal(true)}
-                className="bg-gradient-to-r from-purple-500 to-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:from-purple-600 hover:to-blue-600 transition-all"
-              >
-                🎯 AI Prediction Proposal
-              </button>
+              isConnected ? (
+                <button
+                  onClick={() => setShowCreatePredictionModal(true)}
+                  className="bg-gradient-to-r from-purple-500 to-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:from-purple-600 hover:to-blue-600 transition-all"
+                >
+                  🎯 AI Prediction Proposal
+                </button>
+              ) : (
+                <button
+                  className="bg-yellow-500 text-white px-4 py-2 rounded-lg text-sm font-medium cursor-not-allowed"
+                  title="Wallet connection required"
+                >
+                  🔗 Connect Wallet to Create
+                </button>
+              )
             ) : (
               <button
                 onClick={() => setShowLoginModal(true)}
@@ -1997,7 +2049,7 @@ export default function SportsNewsApp() {
                       {user?.username?.charAt(0).toUpperCase() || "U"}
                     </div>
                     <span className="text-sm font-medium">
-                      {user?.username || "사용자"}
+                      {user?.username || "User"}
                     </span>
                   </div>
 
@@ -2032,7 +2084,7 @@ export default function SportsNewsApp() {
           <div className="bg-white rounded-2xl p-8 w-96 max-w-md mx-4">
             <div className="text-center mb-6">
               <div className="w-12 h-12 bg-[#00C28C] rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-white font-bold text-lg">스</span>
+                <span className="text-white font-bold text-lg">S</span>
               </div>
               <h2 className="text-xl font-bold text-gray-900 mb-2">
                 SPL Sign Up/Login
@@ -2064,7 +2116,7 @@ export default function SportsNewsApp() {
               <input
                 name="password"
                 type="password"
-                placeholder="비밀번호"
+                placeholder="Password"
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00C28C]"
                 required
               />
@@ -2072,18 +2124,18 @@ export default function SportsNewsApp() {
                 type="submit"
                 className="w-full bg-[#00C28C] text-white py-3 rounded-lg font-medium hover:bg-[#00A876] transition-colors"
               >
-                로그인
+                Login
               </button>
             </form>
 
             <div className="mt-6 space-y-3">
               <button className="w-full bg-yellow-400 text-black py-3 rounded-lg font-medium hover:bg-yellow-500 transition-colors flex items-center justify-center gap-2">
                 <span>💬</span>
-                카카오 계정으로 계속하기
+                Continue with Kakao
               </button>
               <button className="w-full bg-gray-900 text-white py-3 rounded-lg font-medium hover:bg-gray-800 transition-colors flex items-center justify-center gap-2">
                 <span>G</span>
-                구글 계정으로 계속하기
+                Continue with Google
               </button>
             </div>
 

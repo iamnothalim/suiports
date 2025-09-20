@@ -9,6 +9,8 @@ class PredictionEventCreate(BaseModel):
     option_a: str
     option_b: str
     duration: int
+    deadline: Optional[str] = None  # deadline date
+    user_address: Optional[str] = None
 
 # 예측 이벤트 응답 스키마
 class PredictionEventResponse(BaseModel):
@@ -18,12 +20,15 @@ class PredictionEventResponse(BaseModel):
     option_a: str
     option_b: str
     duration: int
+    deadline: Optional[str] = None  # deadline date
     creator_id: int
     status: str
     created_at: datetime
     expires_at: Optional[datetime]
     total_bets: int
     total_amount: int
+    user_address: Optional[str] = None
+    creator: Optional[str] = None
     
     class Config:
         from_attributes = True

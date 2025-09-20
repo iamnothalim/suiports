@@ -94,12 +94,14 @@ class PredictionEvent(Base):
     option_a = Column(String(200), nullable=False)  # 2지선다 옵션 A
     option_b = Column(String(200), nullable=False)  # 2지선다 옵션 B
     duration = Column(Integer, nullable=False)  # 베팅 기간 (시간)
+    deadline = Column(String(50), nullable=True)  # 마감 날짜
     creator_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     status = Column(String(20), default="pending")  # pending, approved, rejected, active, expired
     created_at = Column(DateTime, default=datetime.utcnow)
     expires_at = Column(DateTime)
     total_bets = Column(Integer, default=0)
     total_amount = Column(Integer, default=0)
+    user_address = Column(String(100), nullable=True)  # 지갑 주소
 
 # 예측 점수 모델
 class PredictionScore(Base):

@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from app.models.database import get_db, PredictionEvent, User
+from sqlalchemy.orm import joinedload
 from app.schemas.prediction import PredictionEventCreate, PredictionEventResponse, PredictionEventApproval
 from app.api.endpoints.auth import get_current_user
 
@@ -26,9 +27,11 @@ async def create_prediction_event(
         option_a=prediction.option_a,
         option_b=prediction.option_b,
         duration=prediction.duration,
+        deadline=prediction.deadline,
         creator_id=current_user.id,
         status="pending",
-        expires_at=expires_at
+        expires_at=expires_at,
+        user_address=prediction.user_address
     )
     
     db.add(db_prediction)
@@ -53,6 +56,11 @@ async def get_pending_predictions(
         PredictionEvent.status == "pending"
     ).all()
     
+    # creator 정보 추가
+    for prediction in predictions:
+        creator = db.query(User).filter(User.id == prediction.creator_id).first()
+        prediction.creator = creator.username if creator else "Unknown"
+    
     return predictions
 
 @router.get("/", response_model=List[PredictionEventResponse])
@@ -68,6 +76,12 @@ async def get_all_predictions(
         )
     
     predictions = db.query(PredictionEvent).all()
+    
+    # creator 정보 추가
+    for prediction in predictions:
+        creator = db.query(User).filter(User.id == prediction.creator_id).first()
+        prediction.creator = creator.username if creator else "Unknown"
+    
     return predictions
 
 @router.get("/approved", response_model=List[PredictionEventResponse])
@@ -78,6 +92,11 @@ async def get_approved_predictions(
     predictions = db.query(PredictionEvent).filter(
         PredictionEvent.status == "approved"
     ).all()
+    
+    # creator 정보 추가
+    for prediction in predictions:
+        creator = db.query(User).filter(User.id == prediction.creator_id).first()
+        prediction.creator = creator.username if creator else "Unknown"
     
     return predictions
 

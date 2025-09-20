@@ -50,7 +50,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
         full_name: "",
       });
     } catch (error: any) {
-      setError(error.response?.data?.detail || "오류가 발생했습니다.");
+      setError(error.response?.data?.detail || "An error occurred.");
     } finally {
       setIsLoading(false);
     }
@@ -81,7 +81,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
       <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-gray-900">
-            {isLogin ? "로그인" : "회원가입"}
+            {isLogin ? "Login" : "Sign Up"}
           </h2>
           <button
             onClick={onClose}
@@ -100,7 +100,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              사용자명
+              Username
             </label>
             <div className="relative">
               <User
@@ -114,7 +114,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                 onChange={handleInputChange}
                 required
                 className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                placeholder="사용자명을 입력하세요"
+                placeholder="Enter username"
               />
             </div>
           </div>
@@ -123,7 +123,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
             <>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  이메일
+                  Email
                 </label>
                 <div className="relative">
                   <Mail
@@ -137,14 +137,14 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                     onChange={handleInputChange}
                     required
                     className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                    placeholder="이메일을 입력하세요"
+                    placeholder="Enter email"
                   />
                 </div>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  이름 (선택사항)
+                  Full Name (Optional)
                 </label>
                 <input
                   type="text"
@@ -152,7 +152,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                   value={formData.full_name}
                   onChange={handleInputChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                  placeholder="이름을 입력하세요"
+                  placeholder="Enter full name"
                 />
               </div>
             </>
@@ -160,7 +160,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              비밀번호
+              Password
             </label>
             <div className="relative">
               <Lock
@@ -174,7 +174,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                 onChange={handleInputChange}
                 required
                 className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                placeholder="비밀번호를 입력하세요"
+                placeholder="Enter password"
               />
               <button
                 type="button"
@@ -191,7 +191,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
             disabled={isLoading}
             className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isLoading ? "처리 중..." : isLogin ? "로그인" : "회원가입"}
+            {isLoading ? "Processing..." : isLogin ? "Login" : "Sign Up"}
           </button>
         </form>
 
@@ -201,8 +201,8 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
             className="text-blue-600 hover:text-blue-800 text-sm"
           >
             {isLogin
-              ? "계정이 없으신가요? 회원가입"
-              : "이미 계정이 있으신가요? 로그인"}
+              ? "Don't have an account? Sign Up"
+              : "Already have an account? Login"}
           </button>
         </div>
       </div>
