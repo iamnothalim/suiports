@@ -1,0 +1,21 @@
+{
+  "name": "sui-ports-monolith",
+  "version": "1.0.0",
+  "description": "React + FastAPI 모놀리식 웹사이트",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && uvicorn main:app --reload --host 0.0.0.0 --port 8000",
+    "build": "cd frontend && npm run build",
+    "install:all": "npm install && cd frontend && npm install && cd ../backend && pip install -r requirements.txt",
+    "init-db": "cd backend && python init_db.py",
+    "docker:up": "docker-compose up --build",
+    "docker:down": "docker-compose down"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "keywords": ["react", "fastapi", "monolith", "typescript"],
+  "author": "Your Name",
+  "license": "MIT"
+}
