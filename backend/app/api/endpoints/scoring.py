@@ -264,11 +264,25 @@ async def batch_calculate_and_select_best(
         ).first()
         
         if best_prediction:
+            # 1위 예측을 승인
             best_prediction.status = "approved"
+            
+            # 나머지 모든 pending 예측들을 삭제
+            deleted_count = 0
+            for prediction in unscored_predictions:
+                if prediction.id != best_prediction_id:
+                    # 관련된 점수도 함께 삭제
+                    db.query(PredictionScore).filter(
+                        PredictionScore.prediction_id == prediction.id
+                    ).delete()
+                    # 예측 이벤트 삭제
+                    db.delete(prediction)
+                    deleted_count += 1
+            
             db.commit()
             
             return {
-                "message": f"Batch scoring completed. Selected prediction with highest score: {best_score['total_score']:.2f}",
+                "message": f"Batch scoring completed. Selected prediction with highest score: {best_score['total_score']:.2f}. Deleted {deleted_count} other pending predictions.",
                 "selected_prediction": {
                     "id": best_prediction.id,
                     "game_id": best_prediction.game_id,
@@ -276,6 +290,7 @@ async def batch_calculate_and_select_best(
                     "total_score": best_score['total_score'],
                     "status": "approved"
                 },
+                "deleted_count": deleted_count,
                 "calculated_scores": calculated_scores
             }
     
