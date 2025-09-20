@@ -519,6 +519,71 @@ def insert_sample_data():
                 "option_b": "Outside Top 4",
                 "duration": 216,
                 "status": "approved"
+            },
+            # 추가 더미 데이터 (스코어링되지 않은 상태)
+            {
+                "game_id": "HAALAND_PSG_009",
+                "prediction": "Erling Haaland will transfer to PSG in 2025",
+                "option_a": "Will Transfer",
+                "option_b": "Will Stay at Manchester City",
+                "duration": 240,
+                "status": "pending"
+            },
+            {
+                "game_id": "REALMADRID_CL_010",
+                "prediction": "Real Madrid will win Champions League in 2024-25 season",
+                "option_a": "Will Win Champions League",
+                "option_b": "Will Not Win Champions League",
+                "duration": 360,
+                "status": "pending"
+            },
+            {
+                "game_id": "NEYMAR_BARCELONA_011",
+                "prediction": "Neymar will return to Barcelona in 2025",
+                "option_a": "Will Return to Barcelona",
+                "option_b": "Will Stay at Al-Hilal",
+                "duration": 180,
+                "status": "pending"
+            },
+            {
+                "game_id": "DEBRUYNE_INJURY_012",
+                "prediction": "Kevin De Bruyne will return from injury within 2 months",
+                "option_a": "Will Return within 2 months",
+                "option_b": "Will Return after 2 months",
+                "duration": 120,
+                "status": "pending"
+            },
+            {
+                "game_id": "MANUTD_TOP6_013",
+                "prediction": "Manchester United will finish in top 6 of Premier League",
+                "option_a": "Will Finish in Top 6",
+                "option_b": "Will Finish Outside Top 6",
+                "duration": 200,
+                "status": "pending"
+            },
+            {
+                "game_id": "LEWANDOWSKI_TOPSCORER_014",
+                "prediction": "Robert Lewandowski will be Bundesliga top scorer",
+                "option_a": "Will Be Top Scorer",
+                "option_b": "Will Not Be Top Scorer",
+                "duration": 240,
+                "status": "pending"
+            },
+            {
+                "game_id": "SALAH_20GOALS_015",
+                "prediction": "Mohamed Salah will score 20+ goals this season",
+                "option_a": "Will Score 20+ Goals",
+                "option_b": "Will Score Less than 20 Goals",
+                "duration": 180,
+                "status": "pending"
+            },
+            {
+                "game_id": "VINICIUS_BALLONDOR_016",
+                "prediction": "Vinícius Júnior will be nominated for Ballon d'Or",
+                "option_a": "Will Be Nominated",
+                "option_b": "Will Not Be Nominated",
+                "duration": 300,
+                "status": "pending"
             }
         ]
         

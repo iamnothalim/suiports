@@ -78,6 +78,8 @@ export default function SportsNewsApp() {
   const [isBatchScoring, setIsBatchScoring] = useState(false)
   const [scoringProgress, setScoringProgress] = useState(0)
   const [scoringStatus, setScoringStatus] = useState('')
+  const [selectedPrediction, setSelectedPrediction] = useState<any>(null)
+  const [showSelectionResult, setShowSelectionResult] = useState(false)
 
   // 인증 상태
   const { user, logout } = useAuth()
@@ -269,6 +271,75 @@ export default function SportsNewsApp() {
     } catch (error) {
       console.error('Batch scoring error:', error)
       setScoringStatus('Batch scoring error occurred')
+      setIsBatchScoring(false)
+    }
+  }
+
+  // 일괄 스코어링 및 자동 선택 함수
+  const batchCalculateAndSelectBest = async () => {
+    try {
+      const token = localStorage.getItem('access_token')
+      if (!token) {
+        alert('Login required.')
+        return
+      }
+
+      setIsBatchScoring(true)
+      setScoringProgress(0)
+      setScoringStatus('Starting batch scoring and selection...')
+
+      const response = await fetch('http://localhost:8000/api/v1/scoring/batch-calculate-and-select', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      
+      if (response.ok) {
+        const result = await response.json()
+        setScoringStatus(`Completed! Selected: ${result.selected_prediction?.game_id || 'None'}`)
+        setScoringProgress(100)
+        
+        if (result.selected_prediction) {
+          setSelectedPrediction(result.selected_prediction)
+          setShowSelectionResult(true)
+          
+          // 기존 점수들과 새로 계산된 점수들을 합치기
+          setPredictionScores(prev => {
+            const existingIds = new Set(prev.map(s => s.prediction_id))
+            const newScores = result.calculated_scores.map((score: any) => ({
+              prediction_id: score.prediction_id,
+              total_score: score.total_score,
+              // 다른 필드들은 기본값으로 설정
+              quality_score: 0,
+              demand_score: 0,
+              reputation_score: 0,
+              novelty_score: 0,
+              economic_score: 0
+            })).filter((s: any) => !existingIds.has(s.prediction_id))
+            return [...prev, ...newScores]
+          })
+          
+          // 예측 목록 새로고침
+          loadPredictions()
+        }
+        
+        setTimeout(() => {
+          setIsBatchScoring(false)
+          setScoringProgress(0)
+          setScoringStatus('')
+          setShowSelectionResult(false)
+        }, 3000)
+      } else {
+        const errorData = await response.json()
+        console.error('Batch scoring and selection failed:', errorData)
+        setScoringStatus(`Failed: ${errorData.detail || 'Unknown error'}`)
+        setIsBatchScoring(false)
+      }
+    } catch (error) {
+      console.error('Batch scoring and selection error:', error)
+      setScoringStatus('Error occurred during batch processing')
       setIsBatchScoring(false)
     }
   }
@@ -692,7 +763,7 @@ export default function SportsNewsApp() {
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-2xl font-bold text-gray-900">🔧 Admin Panel</h1>
             
-            {/* 일괄 스코어링 버튼 */}
+            {/* 일괄 스코어링 버튼들 */}
             <div className="flex items-center gap-4">
               {isBatchScoring && (
                 <div className="flex items-center gap-3">
@@ -706,17 +777,41 @@ export default function SportsNewsApp() {
                 </div>
               )}
               
-              <button
-                onClick={batchCalculateAIScores}
-                disabled={isBatchScoring}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  isBatchScoring 
-                    ? 'bg-gray-400 text-white cursor-not-allowed' 
-                    : 'bg-gradient-to-r from-purple-500 to-blue-500 text-white hover:from-purple-600 hover:to-blue-600'
-                }`}
-              >
-                {isBatchScoring ? '🔄 Processing...' : '🤖 Batch AI Scoring'}
-              </button>
+              {showSelectionResult && selectedPrediction && (
+                <div className="bg-green-100 border border-green-300 rounded-lg p-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-green-600 font-bold">🏆 Selected:</span>
+                    <span className="text-green-800 font-medium">{selectedPrediction.game_id}</span>
+                    <span className="text-green-600 text-sm">(Score: {selectedPrediction.total_score.toFixed(1)})</span>
+                  </div>
+                </div>
+              )}
+              
+              <div className="flex gap-2">
+                <button
+                  onClick={batchCalculateAIScores}
+                  disabled={isBatchScoring}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    isBatchScoring 
+                      ? 'bg-gray-400 text-white cursor-not-allowed' 
+                      : 'bg-gradient-to-r from-purple-500 to-blue-500 text-white hover:from-purple-600 hover:to-blue-600'
+                  }`}
+                >
+                  {isBatchScoring ? '🔄 Processing...' : '🤖 Batch Scoring'}
+                </button>
+                
+                <button
+                  onClick={batchCalculateAndSelectBest}
+                  disabled={isBatchScoring}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    isBatchScoring 
+                      ? 'bg-gray-400 text-white cursor-not-allowed' 
+                      : 'bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:from-green-600 hover:to-emerald-600'
+                  }`}
+                >
+                  {isBatchScoring ? '🔄 Processing...' : '🎯 Score & Auto-Select'}
+                </button>
+              </div>
             </div>
           </div>
           

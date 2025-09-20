@@ -80,10 +80,9 @@ class AIScoringService:
         AI 점수 계산을 위한 프롬프트 생성
         """
         prompt = f"""
-당신은 스포츠 예측 이벤트의 품질을 평가하는 AI 전문가입니다. 
-다음 예측 이벤트를 5개 카테고리로 평가하고 각각 0-100점으로 점수를 매겨주세요.
+당신은 스포츠 예측 이벤트 평가 AI입니다. 다음 예측 정보를 5개 기준에 따라 0-100점으로 평가하고, 지정된 JSON 형식으로 결과를 출력하세요.
 
-예측 정보:
+[예측 정보]
 - 게임 ID: {prediction_data.get('game_id', '')}
 - 예측 내용: {prediction_data.get('prediction', '')}
 - 옵션 A: {prediction_data.get('option_a', '')}
@@ -92,66 +91,26 @@ class AIScoringService:
 - 제안자 활동일수: {prediction_data.get('creator_activity_days', 0)}
 - 제안자 기여도: {prediction_data.get('creator_contribution_score', 0.0)}
 
-평가 기준:
+[평가 기준]
+1.  **품질**: 명확성, 판정 근거의 신뢰성, 명확한 종료 시점
+2.  **수요**: 주제의 인기도, 트렌드, 시의성
+3.  **평판**: 제안자의 활동 이력, 과거 기여도 및 성공률
+4.  **독창성**: 기존 예측과의 중복 여부, 선점 우위
+5.  **경제성**: 예상 참여도, 판정(오라클) 비용 및 리스크
 
-(A) 품질/해결 가능성 (35% 가중치)
-- 명확도: 이분법/멀티클래스가 명확한가 (모호 문구 감점)
-- 판정 근거: 1차 데이터 소스 존재 (공식 리그/기관/API)
-- 타임프레임: 종료 시점이 분명한가 (무기한/지연 위험 감점)
-- 규정 준수: 지역 규제/콘텐츠 정책 충돌 여부
-
-(B) 수요/트렌드 신호 (25% 가중치)
-- 트렌드 지표: X 언급량·속도, 검색트렌드, 뉴스량 변화
-- 주제 인기: 팀/선수 지역 인기, 리그 중요도
-- 시의성: 경기 D-날짜 근접, 이적시장/컵대회 시즌성
-
-(C) 제안자 신뢰/기여 (20% 가중치)
-- 충성도: 활동일수, 커뮤니티 레벨, 과거 기여·정확도
-- 성공 히스토리: 과거 제안 채택률, 거래량/참여율
-- 본드 규모: 제안 시 스테이킹 (소각/슬래시 위험 감수)
-
-(D) 선점/중복도 (10% 가중치)
-- 최초성: 동일/유사 마켓 대비 최초 제안 (타임스탬프 가점)
-- 중복도: 의미·엔티티·기간이 유사한 기존 마켓과의 거리
-
-(E) 경제성/운영성 (10% 가중치)
-- 예상 유동성: 과거 유사 주제의 평균 참여/거래량
-- 스프레드/변동성: 가격발견에 유리한가 (극단적 원사이드 감점)
-- 오라클 비용/지연 리스크: 판정 수고/비용 추정
-
-다음 JSON 형식으로 응답해주세요:
+[출력 형식]
 {{
-    "quality_score": 85,
-    "demand_score": 72,
-    "reputation_score": 60,
-    "novelty_score": 90,
-    "economic_score": 75,
-    "quality_details": {{
-        "clarity": 90,
-        "data_source": 80,
-        "timeframe": 85,
-        "compliance": 85
-    }},
-    "demand_details": {{
-        "trend_indicators": 70,
-        "topic_popularity": 75,
-        "timing": 70
-    }},
-    "reputation_details": {{
-        "loyalty": 60,
-        "success_history": 50,
-        "bond_size": 70
-    }},
-    "novelty_details": {{
-        "first_mover": 95,
-        "uniqueness": 85
-    }},
-    "economic_details": {{
-        "liquidity": 80,
-        "volatility": 70,
-        "oracle_cost": 75
-    }},
-    "ai_reasoning": "이 예측은 명확한 이분법 구조를 가지고 있으며, 공식 리그 데이터를 기반으로 합니다. 하지만 제안자의 활동 이력이 부족하여 신뢰도 점수가 낮습니다."
+    "quality_score": 0,
+    "demand_score": 0,
+    "reputation_score": 0,
+    "novelty_score": 0,
+    "economic_score": 0,
+    "quality_details": {{"clarity": 0, "data_source": 0, "timeframe": 0, "compliance": 0}},
+    "demand_details": {{"trend_indicators": 0, "topic_popularity": 0, "timing": 0}},
+    "reputation_details": {{"loyalty": 0, "success_history": 0, "bond_size": 0}},
+    "novelty_details": {{"first_mover": 0, "uniqueness": 0}},
+    "economic_details": {{"liquidity": 0, "volatility": 0, "oracle_cost": 0}},
+    "ai_reasoning": "평가에 대한 핵심 근거를 한 문장으로 요약합니다."
 }}
 """
         return prompt
