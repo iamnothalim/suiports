@@ -29,11 +29,11 @@ import "./index.css";
 const queryClient = new QueryClient();
 
 const navItems = [
-  { id: "breaking", label: "Breaking News", icon: Zap },
-  { id: "stats", label: "Statistics", icon: BarChart3 },
+  { id: "breaking", label: "Live Feed", icon: Zap },
+  { id: "stats", label: "Ranking", icon: BarChart3 },
   { id: "videos", label: "Videos", icon: Video },
-  { id: "community", label: "Community", icon: MessageSquare },
-  { id: "prediction", label: "Prediction Game", icon: Target },
+  { id: "community", label: "Discussion", icon: MessageSquare },
+  { id: "prediction", label: "Predict Marketplace", icon: Target },
   { id: "admin", label: "Admin", icon: Settings },
 ];
 
@@ -1797,27 +1797,25 @@ export default function SportsNewsApp() {
     return (
       <div className="pb-20 relative w-full">
         <div className="bg-white border-b border-gray-200 p-6 w-full">
-          <h2 className="text-lg font-bold mb-4 text-gray-900">
-            🔥 실시간 인기글
-          </h2>
+          <h2 className="text-lg font-bold mb-4 text-gray-900">🔥 HOT Posts</h2>
           <div className="space-y-3">
             {[
               {
-                title: "손흥민 골든부트 가능성은?",
-                author: "축구매니아",
-                time: "2시간 전",
+                title: "Can Son Heung-min win the Golden Boot?",
+                author: "FootballMania",
+                time: "2 hours ago",
                 likes: 156,
               },
               {
-                title: "이강인 PSG 적응기 어떻게 보시나요",
-                author: "파리지앵",
-                time: "4시간 전",
+                title: "How do you see Lee Kang-in's adaptation to PSG?",
+                author: "Parisian",
+                time: "4 hours ago",
                 likes: 89,
               },
               {
-                title: "김민재 바이에른 이적 후 근황",
-                author: "분데스리가팬",
-                time: "6시간 전",
+                title: "Kim Min-jae's current status after Bayern transfer",
+                author: "BundesligaFan",
+                time: "6 hours ago",
                 likes: 67,
               },
             ].map((post, index) => (
@@ -1976,10 +1974,11 @@ export default function SportsNewsApp() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-8">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-[#00C28C] rounded-full flex items-center justify-center">
-                  <span className="text-white font-bold text-sm">Sui</span>
-                </div>
-                <h1 className="text-xl font-bold text-gray-900">Suiports</h1>
+                <img
+                  src="/public/assets/suiports_logo.png"
+                  alt="Suiports Logo"
+                  className="w-32 h-10 object-contain"
+                />
               </div>
             </div>
 
@@ -1992,7 +1991,7 @@ export default function SportsNewsApp() {
                     : "text-gray-600 hover:text-gray-900"
                 }`}
               >
-                Breaking News
+                Live Feed
               </button>
               <button
                 onClick={() => setActiveTab("stats")}
@@ -2002,7 +2001,7 @@ export default function SportsNewsApp() {
                     : "text-gray-600 hover:text-gray-900"
                 }`}
               >
-                Statistics
+                Ranking
               </button>
               <button
                 onClick={() => setActiveTab("community")}
@@ -2012,7 +2011,7 @@ export default function SportsNewsApp() {
                     : "text-gray-600 hover:text-gray-900"
                 }`}
               >
-                Community
+                Discussion
               </button>
               <button
                 onClick={() => setActiveTab("prediction")}
@@ -2022,7 +2021,7 @@ export default function SportsNewsApp() {
                     : "text-gray-600 hover:text-gray-900"
                 }`}
               >
-                Betting Game
+                Predict Marketplace
                 <span className="absolute -top-2 -right-3 bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full font-bold my-[-10px] mx-[-6px]">
                   HOT
                 </span>
