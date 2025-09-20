@@ -70,28 +70,18 @@ export default function SportsNewsApp() {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showCreatePredictionModal, setShowCreatePredictionModal] =
     useState(false);
-<<<<<<< Updated upstream
   const [bettingCard, setBettingCard] = useState<any>(null);
   const [betAmount, setBetAmount] = useState(10);
   const [selectedOption, setSelectedOption] = useState<any>(null);
   const [selectedPost, setSelectedPost] = useState<any>(null);
-=======
-  const [bettingCard, setBettingCard] = useState(null);
-  const [betAmount, setBetAmount] = useState(10);
-  const [selectedOption, setSelectedOption] = useState(null);
-  const [selectedPost, setSelectedPost] = useState(null);
->>>>>>> Stashed changes
 
   const [stickyDate, setStickyDate] = useState("2025-08-12");
   const [statsTab, setStatsTab] = useState("team");
   const [predictions, setPredictions] = useState<any[]>([]);
   const [predictionScores, setPredictionScores] = useState<any[]>([]);
-<<<<<<< Updated upstream
   const [isBatchScoring, setIsBatchScoring] = useState(false);
   const [scoringProgress, setScoringProgress] = useState(0);
   const [scoringStatus, setScoringStatus] = useState("");
-=======
->>>>>>> Stashed changes
 
   // 인증 상태
   const { user, logout } = useAuth();
@@ -261,7 +251,6 @@ export default function SportsNewsApp() {
       alert("AI 점수 계산 중 오류가 발생했습니다.");
     }
   };
-<<<<<<< Updated upstream
 
   // 일괄 AI 점수 계산 함수
   const batchCalculateAIScores = async () => {
@@ -320,8 +309,6 @@ export default function SportsNewsApp() {
       setIsBatchScoring(false);
     }
   };
-=======
->>>>>>> Stashed changes
 
   // Load prediction events when login status changes
   React.useEffect(() => {
@@ -457,29 +444,16 @@ export default function SportsNewsApp() {
         email: email,
         avatar: email.charAt(0).toUpperCase(),
       };
-<<<<<<< Updated upstream
       // Note: These functions are handled by AuthContext
-=======
-      setUser(userData);
-      setIsLoggedIn(true);
->>>>>>> Stashed changes
       setShowLoginModal(false);
     }
   };
 
   const handleLogout = () => {
-<<<<<<< Updated upstream
     // Note: This function is handled by AuthContext
   };
 
   const handleBetClick = (gameId: any, option: any) => {
-=======
-    setUser(null);
-    setIsLoggedIn(false);
-  };
-
-  const handleBetClick = (gameId, option) => {
->>>>>>> Stashed changes
     setBettingCard(gameId);
     setSelectedOption(option);
     setBetAmount(10);
@@ -487,20 +461,12 @@ export default function SportsNewsApp() {
 
   const handleBetSubmit = () => {
     // 베팅 로직 처리
-<<<<<<< Updated upstream
     console.log(`베팅: ${selectedOption?.name}, 금액: $${betAmount}`);
-=======
-    console.log(`베팅: ${selectedOption.name}, 금액: $${betAmount}`);
->>>>>>> Stashed changes
     setBettingCard(null);
     setSelectedOption(null);
   };
 
-<<<<<<< Updated upstream
   const handlePostClick = (post: any) => {
-=======
-  const handlePostClick = (post) => {
->>>>>>> Stashed changes
     setSelectedPost(post);
   };
 
@@ -819,7 +785,6 @@ export default function SportsNewsApp() {
     return (
       <div className="pb-20 relative w-full">
         <div className="bg-white border-b border-gray-200 p-6 w-full">
-<<<<<<< Updated upstream
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-2xl font-bold text-gray-900">🔧 Admin Panel</h1>
 
@@ -850,12 +815,6 @@ export default function SportsNewsApp() {
               </button>
             </div>
           </div>
-=======
-          <h1 className="text-2xl font-bold text-gray-900 mb-6">
-            🔧 Admin Panel
-          </h1>
-
->>>>>>> Stashed changes
           {/* 대기 중인 예측 이벤트 */}
           <div className="mb-8">
             <h2 className="text-lg font-bold text-gray-900 mb-4">
@@ -1073,11 +1032,7 @@ export default function SportsNewsApp() {
           {/* 승인된 예측 이벤트 */}
           <div>
             <h2 className="text-lg font-bold text-gray-900 mb-4">
-<<<<<<< Updated upstream
               ✅ Approved Prediction Events (Ranked by AI Score)
-=======
-              ✅ Approved Prediction Events
->>>>>>> Stashed changes
             </h2>
             {approvedPredictions.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
@@ -1085,7 +1040,6 @@ export default function SportsNewsApp() {
               </div>
             ) : (
               <div className="space-y-4">
-<<<<<<< Updated upstream
                 {approvedPredictions
                   .map((prediction: any) => {
                     const score = predictionScores.find(
@@ -1131,23 +1085,10 @@ export default function SportsNewsApp() {
                             </span>
                           )}
                         </div>
-=======
-                {approvedPredictions.map((prediction: any) => (
-                  <div
-                    key={prediction.id}
-                    className="border border-green-200 rounded-lg p-4 bg-green-50"
-                  >
-                    <div className="flex justify-between items-start mb-3">
-                      <div className="flex items-center gap-2">
-                        <span className="bg-blue-100 text-blue-600 px-2 py-1 rounded text-xs font-medium">
-                          {prediction.game_id}
-                        </span>
->>>>>>> Stashed changes
                         <span className="text-xs text-gray-500">
                           {new Date(prediction.createdAt).toLocaleString()}
                         </span>
                       </div>
-<<<<<<< Updated upstream
 
                       <p className="text-gray-900 mb-3">
                         {prediction.prediction}
@@ -1285,147 +1226,6 @@ export default function SportsNewsApp() {
                       })()}
                     </div>
                   ))}
-=======
-                      <span className="text-xs text-gray-500">
-                        {new Date(prediction.createdAt).toLocaleString()}
-                      </span>
-                    </div>
-
-                    <p className="text-gray-900 mb-3">
-                      {prediction.prediction}
-                    </p>
-
-                    <div className="grid grid-cols-2 gap-4 mb-3">
-                      <div className="bg-white p-3 rounded border">
-                        <div className="text-sm font-medium text-gray-700 mb-1">
-                          옵션 A
-                        </div>
-                        <div className="text-gray-900">
-                          {prediction.option_a}
-                        </div>
-                      </div>
-                      <div className="bg-white p-3 rounded border">
-                        <div className="text-sm font-medium text-gray-700 mb-1">
-                          옵션 B
-                        </div>
-                        <div className="text-gray-900">
-                          {prediction.option_b}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* 승인된 예측에도 AI 점수 표시 */}
-                    {(() => {
-                      const score = predictionScores.find(
-                        (s) => s.prediction_id === parseInt(prediction.id)
-                      );
-                      if (score) {
-                        const getScoreColor = (score: number) => {
-                          if (score >= 80) return "text-green-600 bg-green-100";
-                          if (score >= 60)
-                            return "text-yellow-600 bg-yellow-100";
-                          if (score >= 40)
-                            return "text-orange-600 bg-orange-100";
-                          return "text-red-600 bg-red-100";
-                        };
-
-                        const getTotalScoreColor = (score: number) => {
-                          if (score >= 80) return "text-green-700 bg-green-200";
-                          if (score >= 60)
-                            return "text-yellow-700 bg-yellow-200";
-                          if (score >= 40)
-                            return "text-orange-700 bg-orange-200";
-                          return "text-red-700 bg-red-200";
-                        };
-
-                        return (
-                          <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-3 rounded-lg border border-green-200">
-                            <div className="flex items-center justify-between mb-2">
-                              <h4 className="text-sm font-medium text-green-900 flex items-center gap-2">
-                                🤖 AI 평가 점수
-                                <span className="text-xs bg-green-200 text-green-800 px-2 py-1 rounded-full">
-                                  완료
-                                </span>
-                              </h4>
-                              <div
-                                className={`px-2 py-1 rounded-full font-bold text-sm ${getTotalScoreColor(
-                                  score.total_score
-                                )}`}
-                              >
-                                {score.total_score}점
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-5 gap-1 mb-2">
-                              <div className="text-center">
-                                <div className="text-xs font-medium text-gray-600 mb-1">
-                                  품질
-                                </div>
-                                <div
-                                  className={`px-1 py-1 rounded text-xs font-bold ${getScoreColor(
-                                    score.quality_score
-                                  )}`}
-                                >
-                                  {score.quality_score}
-                                </div>
-                              </div>
-                              <div className="text-center">
-                                <div className="text-xs font-medium text-gray-600 mb-1">
-                                  수요
-                                </div>
-                                <div
-                                  className={`px-1 py-1 rounded text-xs font-bold ${getScoreColor(
-                                    score.demand_score
-                                  )}`}
-                                >
-                                  {score.demand_score}
-                                </div>
-                              </div>
-                              <div className="text-center">
-                                <div className="text-xs font-medium text-gray-600 mb-1">
-                                  신뢰
-                                </div>
-                                <div
-                                  className={`px-1 py-1 rounded text-xs font-bold ${getScoreColor(
-                                    score.reputation_score
-                                  )}`}
-                                >
-                                  {score.reputation_score}
-                                </div>
-                              </div>
-                              <div className="text-center">
-                                <div className="text-xs font-medium text-gray-600 mb-1">
-                                  선점
-                                </div>
-                                <div
-                                  className={`px-1 py-1 rounded text-xs font-bold ${getScoreColor(
-                                    score.novelty_score
-                                  )}`}
-                                >
-                                  {score.novelty_score}
-                                </div>
-                              </div>
-                              <div className="text-center">
-                                <div className="text-xs font-medium text-gray-600 mb-1">
-                                  경제
-                                </div>
-                                <div
-                                  className={`px-1 py-1 rounded text-xs font-bold ${getScoreColor(
-                                    score.economic_score
-                                  )}`}
-                                >
-                                  {score.economic_score}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      }
-                      return null;
-                    })()}
-                  </div>
-                ))}
->>>>>>> Stashed changes
               </div>
             )}
           </div>
@@ -1761,11 +1561,7 @@ export default function SportsNewsApp() {
           {/* Comments section */}
           <div className="px-6 pb-6">
             <h3 className="text-lg font-bold text-gray-900 mb-4">
-<<<<<<< Updated upstream
               댓글 {String(selectedPost.comments)}개
-=======
-              댓글 {selectedPost.comments}개
->>>>>>> Stashed changes
             </h3>
 
             {/* Comment input */}
@@ -2113,7 +1909,7 @@ export default function SportsNewsApp() {
                     onClick={logout}
                     className="text-gray-500 hover:text-gray-700 text-sm"
                   >
-                    로그아웃
+                    Logout
                   </button>
 
                   {/* Connect Wallet 버튼 */}
@@ -2154,16 +1950,11 @@ export default function SportsNewsApp() {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-<<<<<<< Updated upstream
                 const formData = new FormData(e.target as HTMLFormElement);
                 handleLogin(
                   formData.get("email") as string,
                   formData.get("password") as string
                 );
-=======
-                const formData = new FormData(e.target);
-                handleLogin(formData.get("email"), formData.get("password"));
->>>>>>> Stashed changes
               }}
               className="space-y-4"
             >
