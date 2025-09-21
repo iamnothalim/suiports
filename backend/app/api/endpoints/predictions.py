@@ -4,10 +4,14 @@ from typing import List
 
 from app.models.database import get_db, PredictionEvent, User
 from sqlalchemy.orm import joinedload
-from app.schemas.prediction import PredictionEventCreate, PredictionEventResponse, PredictionEventApproval
+from app.schemas.prediction import PredictionEventCreate, PredictionEventResponse, PredictionEventApproval, PredictionEventPoolUpdate
+from pydantic import BaseModel
 from app.api.endpoints.auth import get_current_user
 
 router = APIRouter()
+
+class PredictionEventStatusUpdate(BaseModel):
+    status: str
 
 @router.post("/", response_model=PredictionEventResponse)
 async def create_prediction_event(
@@ -88,9 +92,9 @@ async def get_all_predictions(
 async def get_approved_predictions(
     db: Session = Depends(get_db)
 ):
-    """승인된 예측 이벤트 조회 (모든 사용자)"""
+    """승인된 및 완료된 예측 이벤트 조회 (모든 사용자)"""
     predictions = db.query(PredictionEvent).filter(
-        PredictionEvent.status == "approved"
+        PredictionEvent.status.in_(["approved", "completed"])
     ).all()
     
     # creator 정보 추가
@@ -129,3 +133,67 @@ async def approve_prediction(
     db.refresh(prediction)
     
     return prediction
+
+@router.put("/{prediction_id}/pool", response_model=PredictionEventResponse)
+async def update_prediction_pool_id(
+    prediction_id: int,
+    pool_update: PredictionEventPoolUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """예측 이벤트의 Pool ID 업데이트 (Admin만)"""
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
+        )
+    
+    # 예측 이벤트 조회
+    prediction = db.query(PredictionEvent).filter(
+        PredictionEvent.id == prediction_id
+    ).first()
+    
+    if not prediction:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Prediction event not found"
+        )
+    
+    # Pool ID 업데이트
+    prediction.pool_id = pool_update.pool_id
+    db.commit()
+    db.refresh(prediction)
+    
+    return prediction
+
+@router.put("/{prediction_id}/status")
+def update_prediction_status(
+    prediction_id: int,
+    status_update: PredictionEventStatusUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """예측 이벤트 상태 업데이트 (Admin만 가능)"""
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
+        )
+    
+    # 예측 이벤트 조회
+    prediction = db.query(PredictionEvent).filter(
+        PredictionEvent.id == prediction_id
+    ).first()
+    
+    if not prediction:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Prediction event not found"
+        )
+    
+    # 상태 업데이트
+    prediction.status = status_update.status
+    db.commit()
+    db.refresh(prediction)
+    
+    return {"message": f"Prediction status updated to {status_update.status}", "prediction": prediction}

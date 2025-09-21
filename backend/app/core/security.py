@@ -2,8 +2,11 @@ from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy.orm import Session
 from app.core.config import settings
+from app.models.database import get_db, User
 
 # 비밀번호 해싱 설정
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -43,3 +46,33 @@ def verify_token(token: str) -> Optional[str]:
         return username
     except JWTError:
         return None
+
+# HTTP Bearer 토큰 스키마
+security = HTTPBearer()
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+) -> User:
+    """현재 인증된 사용자 조회"""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    
+    try:
+        # Bearer 토큰에서 실제 토큰 추출
+        token = credentials.credentials
+        username = verify_token(token)
+        if username is None:
+            raise credentials_exception
+    except Exception:
+        raise credentials_exception
+    
+    # 데이터베이스에서 사용자 조회
+    user = db.query(User).filter(User.username == username).first()
+    if user is None:
+        raise credentials_exception
+    
+    return user

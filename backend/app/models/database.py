@@ -102,6 +102,7 @@ class PredictionEvent(Base):
     total_bets = Column(Integer, default=0)
     total_amount = Column(Integer, default=0)
     user_address = Column(String(100), nullable=True)  # 지갑 주소
+    pool_id = Column(String(100), nullable=True)  # Sui 컨트랙트 Pool ID
 
 # 예측 점수 모델
 class PredictionScore(Base):
@@ -121,6 +122,20 @@ class PredictionScore(Base):
     novelty_details = Column(JSON)  # 선점 세부 점수
     economic_details = Column(JSON)  # 경제성 세부 점수
     ai_reasoning = Column(Text)     # AI 추론 과정
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+# 베팅 모델
+class Bet(Base):
+    __tablename__ = "bets"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    prediction_id = Column(Integer, ForeignKey("prediction_events.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_address = Column(String(100), nullable=False)  # 지갑 주소
+    option = Column(String(200), nullable=False)  # 베팅한 옵션 (option_a 또는 option_b)
+    amount = Column(Float, nullable=False)  # 베팅 금액 (USDC)
+    transaction_hash = Column(String(100), nullable=True)  # Sui 트랜잭션 해시
+    pool_id = Column(String(100), nullable=True)  # Sui Pool ID
     created_at = Column(DateTime, default=datetime.utcnow)
 
 # 데이터베이스 테이블 생성

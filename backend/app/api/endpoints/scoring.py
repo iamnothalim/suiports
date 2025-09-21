@@ -287,6 +287,11 @@ async def batch_calculate_and_select_best(
                     "id": best_prediction.id,
                     "game_id": best_prediction.game_id,
                     "prediction": best_prediction.prediction,
+                    "option_a": best_prediction.option_a,
+                    "option_b": best_prediction.option_b,
+                    "deadline": best_prediction.deadline,
+                    "expires_at": best_prediction.expires_at,
+                    "user_address": best_prediction.user_address,
                     "total_score": best_score['total_score'],
                     "status": "approved"
                 },

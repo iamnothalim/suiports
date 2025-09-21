@@ -21,12 +21,24 @@ import { useCommunityPosts } from "./hooks/useCommunity";
 import { useAllStandings } from "./hooks/useStandings";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 // import { useWallet } from "./contexts/WalletContext";
-import { ConnectButton, useCurrentWallet } from "@mysten/dapp-kit";
+import {
+  ConnectButton,
+  useCurrentWallet,
+  useSuiClient,
+} from "@mysten/dapp-kit";
+import { Transaction } from "@mysten/sui/transactions";
+import { useSignAndExecuteTransaction } from "@mysten/dapp-kit";
 import LoginModal from "./components/LoginModal";
 import CreatePredictionModal from "./components/CreatePredictionModal";
 import "./index.css";
 
 const queryClient = new QueryClient();
+
+// Sui 컨트랙트 상수
+const PACKAGE_ID =
+  "0x3ebdf40d077027d2505d78c57c944d8c6dd1613c9d4826adfbc53d23ca2e4fc5";
+const REGISTRY_ID =
+  "0xd7016b5632331c9ddee6d76a7d5b1b8cffe667e69be411bfb4720dfb851219f9";
 
 const navItems = [
   { id: "breaking", label: "Live Feed", icon: Zap },
@@ -85,6 +97,21 @@ export default function SportsNewsApp() {
   const [selectedPrediction, setSelectedPrediction] = useState<any>(null);
   const [showSelectionResult, setShowSelectionResult] = useState(false);
   const [rejectedPredictions, setRejectedPredictions] = useState<any[]>([]);
+  const [poolInfos, setPoolInfos] = useState<Record<string, any>>({});
+  const [showBettingModal, setShowBettingModal] = useState(false);
+  const [selectedBettingPrediction, setSelectedBettingPrediction] =
+    useState<any>(null);
+  const [selectedBettingOption, setSelectedBettingOption] =
+    useState<string>("");
+  const [bettingAmount, setBettingAmount] = useState<string>("");
+  const [usdcBalance, setUsdcBalance] = useState<number>(0);
+  const [userBets, setUserBets] = useState<
+    Record<string, { option: string; amount: number; timestamp: number }>
+  >({});
+  const [showResultModal, setShowResultModal] = useState(false);
+  const [selectedEndPrediction, setSelectedEndPrediction] = useState<any>(null);
+  const [selectedWinningOption, setSelectedWinningOption] =
+    useState<string>("");
 
   // 인증 상태
   const { user, logout } = useAuth();
@@ -95,12 +122,161 @@ export default function SportsNewsApp() {
   const isConnected = currentWallet?.isConnected || false;
   const address = currentWallet?.currentWallet?.accounts?.[0]?.address || null;
 
+  // Sui 클라이언트 및 트랜잭션 훅
+  const client = useSuiClient();
+  const { mutateAsync: signAndExecute } = useSignAndExecuteTransaction();
+
+  // Sui 컨트랙트 createMatch 함수
+  const createMatch = async (params: {
+    registryId: string;
+    creator: string; // 경기 생성자 주소
+    optionLabels: string[]; // 예: ["Will Transfer","Will Not Transfer"]
+    closeTimeMs: bigint | number;
+    feeBps: number; // 0~10000
+  }) => {
+    console.log("createMatch 함수 호출됨, 파라미터:", params);
+    const { registryId, creator, optionLabels, closeTimeMs, feeBps } = params;
+    const tx = new Transaction();
+
+    const encoder = new TextEncoder();
+    const labelsBytes: number[][] = optionLabels.map((s) =>
+      Array.from(encoder.encode(s))
+    ); // Array<number[]>
+
+    tx.moveCall({
+      target: `${PACKAGE_ID}::suiports::create_match`,
+      arguments: [
+        tx.object(registryId), // &mut Registry (소유 필요)
+        tx.pure.address(creator), // creator 주소
+        // vector<vector<u8>> 로 정확히 전달: 요소 타입을 vector<u8>로 지정
+        tx.pure.vector("vector<u8>", labelsBytes),
+        tx.pure.u64(BigInt(closeTimeMs)),
+        tx.pure.u16(feeBps),
+      ],
+    });
+
+    console.log("트랜잭션 실행 시작...");
+    const res = await signAndExecute({
+      transaction: tx,
+      chain: "sui:testnet",
+    });
+    console.log("트랜잭션 실행 완료:", res);
+
+    // Pool ID 찾기 (Shared Object로 생성됨)
+    const tryFindPoolId = async (): Promise<string | null> => {
+      try {
+        console.log("Pool ID 검색 시작, digest:", res.digest);
+        const effects = await client.waitForTransaction({
+          digest: res.digest,
+          options: { showEffects: true, showObjectChanges: true },
+        });
+        const changes = effects.objectChanges ?? [];
+        console.log("객체 변경사항:", changes);
+
+        // shared 객체에서 Pool 찾기
+        const shared = changes.find(
+          (ch: any) =>
+            ch.type === "transferred" &&
+            typeof ch.objectType === "string" &&
+            ch.objectType.includes("::suiports::Pool")
+        );
+        if (shared?.objectId) {
+          console.log("transferred에서 Pool ID 찾음:", shared.objectId);
+          return shared.objectId;
+        }
+
+        // created에서도 찾기
+        const created = changes.find(
+          (ch: any) =>
+            ch.type === "created" &&
+            typeof ch.objectType === "string" &&
+            ch.objectType.includes("::suiports::Pool")
+        );
+        if (created) {
+          console.log("created에서 Pool ID 찾음:", created.objectId);
+          return created.objectId;
+        }
+
+        console.log("Pool ID를 찾을 수 없음");
+        return null;
+      } catch {
+        return null;
+      }
+    };
+
+    let poolId: string | null = null;
+    for (let i = 0; i < 10 && !poolId; i++) {
+      console.log(`Pool ID 검색 시도 ${i + 1}/10`);
+      poolId = await tryFindPoolId();
+      if (!poolId) {
+        console.log("Pool ID를 찾지 못함, 500ms 대기 후 재시도...");
+        await new Promise((r) => setTimeout(r, 500));
+      }
+    }
+
+    console.log("최종 Pool ID:", poolId);
+    return { digest: res.digest, poolId };
+  };
+
+  // Sui 컨트랙트 get_pool_info 함수
+  const getPoolInfo = async (poolId: string) => {
+    try {
+      console.log("Pool 정보 조회 시작, Pool ID:", poolId);
+
+      const result = await client.getObject({
+        id: poolId,
+        options: {
+          showContent: true,
+          showType: true,
+        },
+      });
+
+      console.log("Pool 정보 조회 결과:", result);
+
+      if (result.data?.content && "fields" in result.data.content) {
+        const fields = result.data.content.fields;
+
+        // Pool 정보 파싱
+        const poolInfo = {
+          poolId: poolId,
+          matchId: fields.match_id || "",
+          closeTimeMs: fields.close_time_ms
+            ? parseInt(fields.close_time_ms)
+            : 0,
+          totals: fields.totals
+            ? fields.totals.map((total: any) => parseInt(total))
+            : [0, 0],
+          optionLabels: fields.option_labels || [],
+          feeBps: fields.fee_bps ? parseInt(fields.fee_bps) : 0,
+          creator: fields.creator || "",
+          registry: fields.registry || "",
+          resultIdx: fields.result_idx ? parseInt(fields.result_idx) : -1,
+        };
+
+        console.log("파싱된 Pool 정보:", poolInfo);
+        console.log(
+          "result_idx 값:",
+          poolInfo.resultIdx,
+          "타입:",
+          typeof poolInfo.resultIdx
+        );
+        return poolInfo;
+      } else {
+        console.error("Pool 정보를 찾을 수 없습니다:", result);
+        return null;
+      }
+    } catch (error) {
+      console.error("Pool 정보 조회 오류:", error);
+      return null;
+    }
+  };
+
   // 예측 이벤트 로드 함수 (백엔드 API 사용)
   const loadPredictions = async () => {
     try {
       const token = localStorage.getItem("access_token");
 
-      // Admin인 경우 모든 예측, 일반 사용자인 경우 승인된 예측만 로드
+      // Admin인 경우 모든 예측, 일반 사용자인 경우 approved와 completed 상태 로드
       const endpoint = user?.is_admin
         ? "http://localhost:8000/api/v1/predictions/"
         : "http://localhost:8000/api/v1/predictions/approved";
@@ -120,6 +296,17 @@ export default function SportsNewsApp() {
         const data = await response.json();
         setPredictions(data);
         console.log("백엔드에서 예측 이벤트 로드 성공:", data);
+
+        // Pool 정보도 함께 로드
+        await loadPoolInfos(data);
+
+        // 베팅 정보 초기화 후 로드
+        setUserBets({});
+
+        // 로그인한 사용자이면 베팅 정보도 로드
+        if (isLoggedIn && user?.id) {
+          await loadUserBets(user.id);
+        }
       } else {
         console.error("예측 이벤트 로드 실패:", response.status);
         setPredictions([]);
@@ -127,6 +314,474 @@ export default function SportsNewsApp() {
     } catch (error) {
       console.error("예측 이벤트 로드 오류:", error);
       setPredictions([]);
+    }
+  };
+
+  // Pool 정보 직접 확인 함수 (디버깅용)
+  const checkPoolResult = async (poolId: string) => {
+    try {
+      console.log("=== Pool Result 확인 시작 ===");
+      const poolInfo = await getPoolInfo(poolId);
+      console.log("Pool Info:", poolInfo);
+      console.log("result_idx:", poolInfo?.resultIdx);
+      console.log("=== Pool Result 확인 완료 ===");
+      return poolInfo;
+    } catch (error) {
+      console.error("Pool Result 확인 오류:", error);
+      return null;
+    }
+  };
+
+  // 전역 함수로 노출 (디버깅용)
+  (window as any).checkPoolResult = checkPoolResult;
+  (window as any).clearUserBets = () => setUserBets({});
+
+  // Pool 정보 로드 함수
+  const loadPoolInfos = async (predictions: any[]) => {
+    const poolInfoPromises = predictions
+      .filter((prediction) => prediction.pool_id)
+      .map(async (prediction) => {
+        try {
+          const poolInfo = await getPoolInfo(prediction.pool_id);
+          return { predictionId: prediction.id, poolInfo };
+        } catch (error) {
+          console.error(
+            `Pool 정보 로드 실패 (ID: ${prediction.pool_id}):`,
+            error
+          );
+          return { predictionId: prediction.id, poolInfo: null };
+        }
+      });
+
+    const results = await Promise.all(poolInfoPromises);
+
+    const newPoolInfos: Record<string, any> = {};
+    results.forEach(({ predictionId, poolInfo }) => {
+      if (poolInfo) {
+        newPoolInfos[predictionId] = poolInfo;
+      }
+    });
+
+    setPoolInfos(newPoolInfos);
+    console.log("Pool 정보 로드 완료:", newPoolInfos);
+  };
+
+  // 사용자 베팅 정보 로드 함수
+  const loadUserBets = async (userId: number) => {
+    try {
+      console.log("사용자 베팅 정보 로드 시작, User ID:", userId);
+
+      // 베팅 정보 초기화
+      setUserBets({});
+
+      const response = await fetch(
+        `http://localhost:8000/api/v1/bets/user-bets-summary/${userId}`
+      );
+
+      if (response.ok) {
+        const betsData = await response.json();
+        console.log("사용자 베팅 정보 로드 성공:", betsData);
+
+        // 베팅 정보를 userBets 상태에 저장
+        setUserBets(betsData);
+      } else {
+        console.error("베팅 정보 로드 실패:", response.status);
+        setUserBets({});
+      }
+    } catch (error) {
+      console.error("베팅 정보 로드 오류:", error);
+      setUserBets({});
+    }
+  };
+
+  // USDC 잔고 조회 함수
+  const getUsdcBalance = async (address: string) => {
+    try {
+      console.log("USDC 잔고 조회 시작, 주소:", address);
+
+      // 모든 코인 잔액에서 USDC 타입을 탐색 (패키지 주소 변경에 대응)
+      const balances = await client.getAllBalances({ owner: address });
+      console.log("모든 코인 잔액:", balances);
+
+      const usdc = balances.find((b) =>
+        b.coinType.toLowerCase().includes("::usdc::usdc")
+      );
+
+      if (!usdc) {
+        console.log("USDC를 찾을 수 없습니다.");
+        setUsdcBalance(0);
+        return 0;
+      }
+
+      console.log("USDC 잔액 정보:", usdc);
+
+      // 메타데이터로 소수점 자리 확인
+      const meta = await client.getCoinMetadata({ coinType: usdc.coinType });
+      console.log("USDC 메타데이터:", meta);
+
+      const decimals = meta?.decimals ?? 6;
+      console.log("USDC decimals:", decimals);
+      console.log("USDC totalBalance (raw):", usdc.totalBalance);
+
+      // 만약 지갑에서 이미 USDC 단위로 표시된다면 (decimals가 0이거나 매우 작은 값)
+      // 그대로 사용, 아니면 decimals로 나누기
+      const balance = usdc.totalBalance
+        ? decimals === 0
+          ? parseFloat(usdc.totalBalance)
+          : parseInt(usdc.totalBalance) / Math.pow(10, decimals)
+        : 0;
+
+      setUsdcBalance(balance);
+      console.log("최종 USDC 잔고:", balance);
+
+      return balance;
+    } catch (error) {
+      console.error("USDC 잔고 조회 오류:", error);
+      setUsdcBalance(0);
+      return 0;
+    }
+  };
+
+  // 베팅 옵션 클릭 핸들러
+  const handleBettingOptionClick = async (prediction: any, option: string) => {
+    if (!isLoggedIn) {
+      alert("로그인이 필요합니다.");
+      setShowLoginModal(true);
+      return;
+    }
+
+    if (!isConnected || !address) {
+      alert("지갑을 연결해주세요.");
+      return;
+    }
+
+    console.log("베팅 옵션 클릭:", { prediction, option });
+
+    // 선택된 베팅 정보 설정
+    setSelectedBettingPrediction(prediction);
+    setSelectedBettingOption(option);
+    setBettingAmount("");
+
+    // USDC 잔고 조회
+    await getUsdcBalance(address);
+
+    // 베팅 모달 열기
+    setShowBettingModal(true);
+  };
+
+  // USDC 타입 감지 함수
+  const detectUsdcType = async (owner: string): Promise<string> => {
+    const balances = await client.getAllBalances({ owner });
+    const usdc = balances.find((b) =>
+      b.coinType.toLowerCase().includes("::usdc::usdc")
+    );
+    if (!usdc)
+      throw new Error(
+        "USDC 코인을 보유하고 있지 않거나 타입을 찾을 수 없습니다."
+      );
+    return usdc.coinType;
+  };
+
+  // Sui 컨트랙트 place_bet 함수
+  const placeBet = async (params: {
+    poolId: string;
+    optionIdx: number; // 0 또는 1 (option_a 또는 option_b)
+    amount: number; // USDC 단위
+  }) => {
+    try {
+      console.log("place_bet 함수 호출됨, 파라미터:", params);
+      const { poolId, optionIdx, amount } = params;
+
+      if (!address) throw new Error("지갑이 연결되어 있지 않습니다.");
+
+      // USDC 타입 감지
+      const usdcType = await detectUsdcType(address);
+      console.log("USDC 타입:", usdcType);
+
+      // 보유 USDC 코인 조회 (필요 시 병합)
+      const coins = await client.getCoins({
+        owner: address,
+        coinType: usdcType,
+      });
+      if ((coins.data?.length ?? 0) === 0)
+        throw new Error("USDC 코인을 보유하고 있지 않습니다.");
+
+      // USDC를 USDC 단위에서 최소 단위로 변환
+      const usdcAmount = Math.floor(amount * 1000000); // 6자리 소수점
+      const need = BigInt(usdcAmount);
+
+      const primaryId = coins.data[0].coinObjectId;
+      let total: bigint = BigInt(coins.data[0].balance);
+      const toMerge: string[] = [];
+
+      for (let i = 1; total < need && i < coins.data.length; i++) {
+        toMerge.push(coins.data[i].coinObjectId);
+        total += BigInt(coins.data[i].balance);
+      }
+
+      if (total < need) throw new Error("USDC 잔액이 부족합니다.");
+
+      const tx = new Transaction();
+
+      // 필요시 코인 병합
+      if (toMerge.length > 0) {
+        tx.mergeCoins(
+          tx.object(primaryId),
+          toMerge.map((id) => tx.object(id))
+        );
+      }
+
+      // 베팅할 코인 분할
+      const [stake] = tx.splitCoins(tx.object(primaryId), [tx.pure.u64(need)]);
+
+      tx.moveCall({
+        target: `${PACKAGE_ID}::suiports::place_bet`,
+        arguments: [
+          tx.object(poolId), // &mut Pool
+          tx.pure.u16(optionIdx), // 옵션 인덱스 (u16 타입)
+          stake, // 분할된 코인
+          tx.pure.u64(BigInt(Date.now())), // 타임스탬프
+        ],
+      });
+
+      console.log("place_bet 트랜잭션 실행 시작...");
+      const res = await signAndExecute({
+        transaction: tx,
+        chain: "sui:testnet",
+      });
+      console.log("place_bet 트랜잭션 실행 완료:", res);
+
+      return { digest: res.digest, success: true };
+    } catch (error) {
+      console.error("place_bet 오류:", error);
+      return { digest: null, success: false, error };
+    }
+  };
+
+  // Sui 컨트랙트 start_match 함수
+  const startMatch = async (params: {
+    registryId: string;
+    poolId: string;
+    matchId: bigint | number;
+  }) => {
+    try {
+      console.log("start_match 함수 호출됨, 파라미터:", params);
+      const { registryId, poolId, matchId } = params;
+
+      const tx = new Transaction();
+
+      tx.moveCall({
+        target: `${PACKAGE_ID}::suiports::start_match`,
+        arguments: [
+          tx.object(registryId), // Registry 객체
+          tx.object(poolId), // Pool 객체
+          tx.pure.u64(BigInt(matchId)), // Match ID
+        ],
+      });
+
+      console.log("start_match 트랜잭션 실행 시작...");
+      const res = await signAndExecute({
+        transaction: tx,
+        chain: "sui:testnet",
+      });
+      console.log("start_match 트랜잭션 실행 완료:", res);
+
+      // 상태 동기화를 위한 대기 시간
+      console.log("상태 동기화를 위해 3초 대기...");
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      return { digest: res.digest, success: true };
+    } catch (error) {
+      console.error("start_match 오류:", error);
+      return { digest: null, success: false, error };
+    }
+  };
+
+  // Sui 컨트랙트 has_user_claimed 함수
+  const hasUserClaimed = async (params: {
+    poolId: string;
+    userAddress: string;
+  }) => {
+    try {
+      console.log("has_user_claimed 함수 호출됨, 파라미터:", params);
+      const { poolId, userAddress } = params;
+
+      const result = await client.getObject({
+        id: poolId,
+        options: {
+          showContent: true,
+          showType: true,
+        },
+      });
+
+      if (result.data?.content && "fields" in result.data.content) {
+        const fields = result.data.content.fields;
+
+        // Pool에서 사용자의 claim 상태 확인
+        // 이 부분은 컨트랙트 구조에 따라 조정이 필요할 수 있습니다
+        const claimedUsers = fields.claimed_users || [];
+        const hasClaimed = claimedUsers.includes(userAddress);
+
+        console.log("사용자 claim 상태:", hasClaimed);
+        return hasClaimed;
+      } else {
+        console.error("Pool 정보를 찾을 수 없습니다:", result);
+        return false;
+      }
+    } catch (error) {
+      console.error("has_user_claimed 오류:", error);
+      return false;
+    }
+  };
+
+  // Sui 컨트랙트 claim 함수
+  const claim = async (params: { poolId: string }) => {
+    try {
+      console.log("claim 함수 호출됨, 파라미터:", params);
+      const { poolId } = params;
+
+      if (!address) {
+        throw new Error("지갑이 연결되어 있지 않습니다.");
+      }
+
+      const tx = new Transaction();
+      const [payout] = tx.moveCall({
+        target: `${PACKAGE_ID}::suiports::claim`,
+        arguments: [tx.object(poolId)], // &mut Pool
+      });
+      tx.transferObjects([payout], tx.pure.address(address));
+
+      console.log("claim 트랜잭션 실행 시작...");
+      const res = await signAndExecute({
+        transaction: tx,
+        chain: "sui:testnet",
+      });
+      console.log("claim 트랜잭션 실행 완료:", res);
+
+      return { digest: res.digest, success: true };
+    } catch (error) {
+      console.error("claim 오류:", error);
+      return { digest: null, success: false, error };
+    }
+  };
+
+  // Sui 컨트랙트 set_result 함수
+  const setResult = async (params: {
+    registryId: string;
+    poolId: string;
+    matchId: bigint | number;
+    resultIdx: number; // 결과 인덱스 (0, 1, 2, ...)
+  }) => {
+    try {
+      console.log("set_result 함수 호출됨, 파라미터:", params);
+      const { registryId, poolId, matchId, resultIdx } = params;
+
+      // u8 범위 검증 (0-255)
+      if (!Number.isInteger(resultIdx) || resultIdx < 0 || resultIdx > 255) {
+        throw new Error(
+          `resultIdx는 0-255 사이의 정수여야 합니다. 현재값: ${resultIdx}`
+        );
+      }
+
+      const tx = new Transaction();
+
+      tx.moveCall({
+        target: `${PACKAGE_ID}::suiports::set_result`,
+        arguments: [
+          tx.object(registryId), // &mut Registry
+          tx.object(poolId), // &mut Pool
+          tx.pure.u64(BigInt(matchId)), // match_id: u64
+          tx.pure.u16(resultIdx), // result_idx: u16
+        ],
+      });
+
+      console.log("set_result 트랜잭션 실행 시작...");
+      const res = await signAndExecute({
+        transaction: tx,
+        chain: "sui:testnet",
+      });
+      console.log("set_result 트랜잭션 실행 완료:", res);
+
+      return { digest: res.digest, success: true };
+    } catch (error) {
+      console.error("set_result 오류:", error);
+      return { digest: null, success: false, error };
+    }
+  };
+
+  // 예측 이벤트 종료 핸들러
+  const handleEndPrediction = async (prediction: any) => {
+    if (!isConnected || !address) {
+      alert("지갑을 연결해주세요.");
+      return;
+    }
+
+    if (!prediction.pool_id) {
+      alert("Pool ID가 없습니다.");
+      return;
+    }
+
+    // Pool 정보 가져오기
+    try {
+      console.log("End Match 모달을 위해 Pool 정보 조회 중...");
+      const poolInfo = await getPoolInfo(prediction.pool_id);
+
+      if (!poolInfo) {
+        alert("Pool 정보를 가져올 수 없습니다.");
+        return;
+      }
+
+      console.log("Pool 정보 조회 완료:", poolInfo);
+
+      // Pool 정보를 포함한 예측 객체로 설정
+      const predictionWithPoolInfo = {
+        ...prediction,
+        poolInfo: poolInfo,
+      };
+
+      setSelectedEndPrediction(predictionWithPoolInfo);
+      setShowResultModal(true);
+    } catch (error) {
+      console.error("Pool 정보 조회 오류:", error);
+      alert("Pool 정보를 가져오는 중 오류가 발생했습니다.");
+    }
+  };
+
+  // 결과 설정 핸들러
+  const handleSetResult = async (prediction: any) => {
+    if (!isConnected || !address) {
+      alert("지갑을 연결해주세요.");
+      return;
+    }
+
+    if (!prediction.pool_id) {
+      alert("Pool ID가 없습니다.");
+      return;
+    }
+
+    // Pool 정보 가져오기
+    try {
+      console.log("Set Result 모달을 위해 Pool 정보 조회 중...");
+      const poolInfo = await getPoolInfo(prediction.pool_id);
+
+      if (!poolInfo) {
+        alert("Pool 정보를 가져올 수 없습니다.");
+        return;
+      }
+
+      console.log("Pool 정보 조회 완료:", poolInfo);
+
+      // Pool 정보를 포함한 예측 객체로 설정
+      const predictionWithPoolInfo = {
+        ...prediction,
+        poolInfo: poolInfo,
+      };
+
+      setSelectedEndPrediction(predictionWithPoolInfo);
+      setShowResultModal(true);
+    } catch (error) {
+      console.error("Pool 정보 조회 오류:", error);
+      alert("Pool 정보를 가져오는 중 오류가 발생했습니다.");
     }
   };
 
@@ -363,6 +1018,91 @@ export default function SportsNewsApp() {
         if (result.selected_prediction) {
           setSelectedPrediction(result.selected_prediction);
           setShowSelectionResult(true);
+
+          console.log("선택된 예측:", result.selected_prediction);
+          console.log("지갑 연결 상태:", isConnected);
+          console.log("현재 주소:", address);
+
+          // Sui 컨트랙트에 createMatch 호출
+          try {
+            if (result.selected_prediction.user_address) {
+              console.log(
+                "user_address 존재:",
+                result.selected_prediction.user_address
+              );
+              // deadline을 밀리초로 변환
+              const deadlineDate = new Date(
+                result.selected_prediction.deadline ||
+                  result.selected_prediction.expires_at
+              );
+              const closeTimeMs = deadlineDate.getTime();
+
+              const { digest, poolId } = await createMatch({
+                registryId: REGISTRY_ID,
+                creator: result.selected_prediction.user_address,
+                optionLabels: [
+                  result.selected_prediction.option_a,
+                  result.selected_prediction.option_b,
+                ],
+                closeTimeMs: closeTimeMs,
+                feeBps: 200,
+              });
+
+              console.log("Sui 컨트랙트 createMatch 성공:", { digest, poolId });
+
+              // Pool ID를 백엔드에 업데이트
+              if (poolId) {
+                try {
+                  const token = localStorage.getItem("access_token");
+                  if (token) {
+                    const updateResponse = await fetch(
+                      `http://localhost:8000/api/v1/predictions/${result.selected_prediction.id}/pool`,
+                      {
+                        method: "PUT",
+                        headers: {
+                          Authorization: `Bearer ${token}`,
+                          "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({ pool_id: poolId }),
+                      }
+                    );
+
+                    if (updateResponse.ok) {
+                      console.log("Pool ID 업데이트 성공:", poolId);
+                      alert(
+                        `Sui 컨트랙트에 매치가 성공적으로 생성되었습니다!\nPool ID: ${poolId}`
+                      );
+                    } else {
+                      console.error(
+                        "Pool ID 업데이트 실패:",
+                        updateResponse.status
+                      );
+                      alert(
+                        `매치는 생성되었지만 Pool ID 업데이트에 실패했습니다.\nPool ID: ${poolId}`
+                      );
+                    }
+                  }
+                } catch (updateError) {
+                  console.error("Pool ID 업데이트 오류:", updateError);
+                  alert(
+                    `매치는 생성되었지만 Pool ID 업데이트 중 오류가 발생했습니다.\nPool ID: ${poolId}`
+                  );
+                }
+              } else {
+                alert(
+                  "Sui 컨트랙트에 매치가 생성되었지만 Pool ID를 찾을 수 없습니다."
+                );
+              }
+            } else {
+              console.log("user_address가 없어서 createMatch를 건너뜁니다.");
+              alert(
+                "선택된 예측에 user_address가 없어서 Sui 컨트랙트 호출을 건너뜁니다."
+              );
+            }
+          } catch (error) {
+            console.error("Sui 컨트랙트 createMatch 오류:", error);
+            alert(`Sui 컨트랙트 호출 중 오류가 발생했습니다: ${error}`);
+          }
 
           // 기존 점수들과 새로 계산된 점수들을 합치기
           setPredictionScores((prev) => {
@@ -792,7 +1532,10 @@ export default function SportsNewsApp() {
       (p) => p.status === "pending"
     );
     const approvedPredictions = predictions.filter(
-      (p) => p.status === "approved"
+      (p) =>
+        p.status === "approved" ||
+        p.status === "ended" ||
+        p.status === "completed"
     );
 
     const handleApprovePrediction = async (predictionId: string) => {
@@ -928,15 +1671,22 @@ export default function SportsNewsApp() {
 
                 <button
                   onClick={batchCalculateAndSelectBest}
-                  disabled={isBatchScoring}
+                  disabled={isBatchScoring || !isConnected}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                    isBatchScoring
+                    isBatchScoring || !isConnected
                       ? "bg-gray-400 text-white cursor-not-allowed"
                       : "bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:from-green-600 hover:to-emerald-600"
                   }`}
+                  title={
+                    !isConnected
+                      ? "Wallet connection required for Sui contract integration"
+                      : ""
+                  }
                 >
                   {isBatchScoring
                     ? "🔄 Processing..."
+                    : !isConnected
+                    ? "🔗 Connect Wallet First"
                     : "🎯 Score & Auto-Select"}
                 </button>
               </div>
@@ -1165,7 +1915,7 @@ export default function SportsNewsApp() {
           {/* 승인된 예측 이벤트 */}
           <div>
             <h2 className="text-lg font-bold text-gray-900 mb-4">
-              ✅ Approved Prediction Events (Ranked by AI Score)
+              ✅ Active & Ended Prediction Events (Ranked by AI Score)
             </h2>
             {approvedPredictions.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
@@ -1184,7 +1934,15 @@ export default function SportsNewsApp() {
                   .map((prediction: any, index: number) => (
                     <div
                       key={prediction.id}
-                      className="border border-green-200 rounded-lg p-4 bg-green-50"
+                      className={`border rounded-lg p-4 ${
+                        prediction.status === "approved"
+                          ? "border-green-200 bg-green-50"
+                          : prediction.status === "ended"
+                          ? "border-orange-200 bg-orange-50"
+                          : prediction.status === "completed"
+                          ? "border-blue-200 bg-blue-50"
+                          : "border-gray-200 bg-gray-50"
+                      }`}
                     >
                       <div className="flex justify-between items-start mb-3">
                         <div className="flex items-center gap-2">
@@ -1214,8 +1972,24 @@ export default function SportsNewsApp() {
                               </span>
                             )}
                           </span>
-                          <span className="bg-green-100 text-green-600 px-2 py-1 rounded text-xs font-medium">
-                            Approved
+                          <span
+                            className={`px-2 py-1 rounded text-xs font-medium ${
+                              prediction.status === "approved"
+                                ? "bg-green-100 text-green-600"
+                                : prediction.status === "ended"
+                                ? "bg-orange-100 text-orange-600"
+                                : prediction.status === "completed"
+                                ? "bg-blue-100 text-blue-600"
+                                : "bg-gray-100 text-gray-600"
+                            }`}
+                          >
+                            {prediction.status === "approved"
+                              ? "Approved"
+                              : prediction.status === "ended"
+                              ? "Ended"
+                              : prediction.status === "completed"
+                              ? "Completed"
+                              : prediction.status}
                           </span>
                           {/* AI 점수 표시 */}
                           {prediction.aiScore > 0 && (
@@ -1224,9 +1998,33 @@ export default function SportsNewsApp() {
                             </span>
                           )}
                         </div>
-                        <span className="text-xs text-gray-500">
-                          {new Date(prediction.createdAt).toLocaleString()}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-500">
+                            {new Date(prediction.createdAt).toLocaleString()}
+                          </span>
+                          {prediction.pool_id && (
+                            <>
+                              {prediction.status === "approved" && (
+                                <button
+                                  onClick={() =>
+                                    handleEndPrediction(prediction)
+                                  }
+                                  className="bg-red-500 text-white px-3 py-1 rounded text-xs font-medium hover:bg-red-600 transition-colors"
+                                >
+                                  End
+                                </button>
+                              )}
+                              {prediction.status === "ended" && (
+                                <button
+                                  onClick={() => handleSetResult(prediction)}
+                                  className="bg-blue-500 text-white px-3 py-1 rounded text-xs font-medium hover:bg-blue-600 transition-colors"
+                                >
+                                  Result
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
                       </div>
 
                       <p className="text-gray-900 mb-3">
@@ -1374,10 +2172,25 @@ export default function SportsNewsApp() {
   };
 
   const renderPredictionContent = () => {
+    // 디버깅: 모든 예측 이벤트 상태 확인
+    console.log("모든 예측 이벤트들:", predictions);
+    console.log(
+      "예측 이벤트 상태들:",
+      predictions.map((p) => ({ id: p.id, status: p.status }))
+    );
+
     // 승인된 예측 이벤트들을 백엔드에서 로드
     const approvedPredictions = predictions.filter(
       (p) => p.status === "approved"
     );
+
+    // 완료된 예측 이벤트들 (상금 claim 가능)
+    const completedPredictions = predictions.filter(
+      (p) => p.status === "completed"
+    );
+
+    console.log("승인된 예측 이벤트 개수:", approvedPredictions.length);
+    console.log("완료된 예측 이벤트 개수:", completedPredictions.length);
 
     return (
       <div className="pb-20 relative w-full">
@@ -1420,11 +2233,62 @@ export default function SportsNewsApp() {
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {approvedPredictions.map((prediction: any) => {
-                const timeLeft = Math.ceil(
-                  (new Date(prediction.expires_at).getTime() - Date.now()) /
-                    (1000 * 60 * 60)
-                );
-                const isExpired = timeLeft <= 0;
+                const poolInfo = poolInfos[prediction.id];
+                const userBet =
+                  userBets[prediction.id] || userBets[String(prediction.id)];
+
+                console.log("Active 이벤트 디버깅:", {
+                  predictionId: prediction.id,
+                  userBets: userBets,
+                  userBet: userBet,
+                  isLoggedIn: isLoggedIn,
+                  userId: user?.id,
+                });
+
+                // Pool 정보가 있으면 실시간 데이터 사용, 없으면 기본값 사용
+                let timeLeft = 0;
+                let isExpired = true;
+                let totalBets = 0;
+                let optionAPercentage = 0;
+                let optionBPercentage = 0;
+
+                if (poolInfo) {
+                  // close_time_ms를 사용하여 남은 시간 계산
+                  timeLeft = Math.ceil(
+                    (poolInfo.closeTimeMs - Date.now()) / (1000 * 60 * 60)
+                  );
+                  isExpired = timeLeft <= 0;
+
+                  // totals 배열의 합계로 총 베팅 금액 계산 (USDC 단위로 변환)
+                  const rawTotalBets = poolInfo.totals.reduce(
+                    (sum: number, total: number) => sum + total,
+                    0
+                  );
+
+                  // USDC 메타데이터에서 decimals 가져오기 (기본값 6)
+                  const usdcDecimals = 6; // Pool의 totals는 일반적으로 USDC와 동일한 decimals 사용
+                  totalBets = rawTotalBets / Math.pow(10, usdcDecimals);
+
+                  // 각 옵션의 퍼센티지 계산 (원시 값으로 계산)
+                  if (rawTotalBets > 0) {
+                    optionAPercentage = Math.round(
+                      (poolInfo.totals[0] / rawTotalBets) * 100
+                    );
+                    optionBPercentage = Math.round(
+                      (poolInfo.totals[1] / rawTotalBets) * 100
+                    );
+                  }
+                } else {
+                  // Pool 정보가 없는 경우 기본값 사용
+                  timeLeft = Math.ceil(
+                    (new Date(prediction.expires_at).getTime() - Date.now()) /
+                      (1000 * 60 * 60)
+                  );
+                  isExpired = timeLeft <= 0;
+                  totalBets = prediction.total_amount || 0;
+                  optionAPercentage = 45;
+                  optionBPercentage = 55;
+                }
 
                 return (
                   <div
@@ -1438,13 +2302,24 @@ export default function SportsNewsApp() {
                         </span>
                         <span
                           className={`px-2 py-1 rounded text-xs font-medium ${
-                            isExpired
-                              ? "bg-gray-100 text-gray-600"
-                              : "bg-green-100 text-green-600"
+                            poolInfo
+                              ? isExpired
+                                ? "bg-gray-100 text-gray-600"
+                                : "bg-green-100 text-green-600"
+                              : "bg-yellow-100 text-yellow-600"
                           }`}
                         >
-                          {isExpired ? "Expired" : "Active"}
+                          {poolInfo
+                            ? isExpired
+                              ? "Expired"
+                              : "Active"
+                            : "Loading..."}
                         </span>
+                        {userBet && isLoggedIn && user?.id && (
+                          <span className="bg-purple-100 text-purple-600 px-2 py-1 rounded text-xs font-medium">
+                            🎯 Bet: {userBet.option} (${userBet.amount})
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -1454,9 +2329,16 @@ export default function SportsNewsApp() {
 
                     <div className="flex justify-between items-center text-sm text-gray-500 mb-3">
                       <span>
-                        ⏰ {isExpired ? "Expired" : `${timeLeft}h left`}
+                        ⏰{" "}
+                        {poolInfo
+                          ? isExpired
+                            ? "Expired"
+                            : `${timeLeft}h left`
+                          : "Loading..."}
                       </span>
-                      <span>💰 Total Bets: ${prediction.total_amount}</span>
+                      <span>
+                        💰 Total Bets: ${poolInfo ? totalBets : "..."}
+                      </span>
                     </div>
 
                     <div className="space-y-2 mb-4">
@@ -1465,45 +2347,69 @@ export default function SportsNewsApp() {
                           {prediction.option_a}
                         </span>
                         <span className="font-semibold text-green-600">
-                          45%
+                          {poolInfo ? `${optionAPercentage}%` : "..."}
                         </span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-gray-700">
                           {prediction.option_b}
                         </span>
-                        <span className="font-semibold text-red-600">55%</span>
+                        <span className="font-semibold text-red-600">
+                          {poolInfo ? `${optionBPercentage}%` : "..."}
+                        </span>
                       </div>
                     </div>
 
                     <div className="flex gap-2">
                       <button
-                        className="flex-1 bg-green-500 text-white py-2 px-3 rounded text-sm font-medium hover:bg-green-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
-                        disabled={isExpired || !isLoggedIn}
+                        className={`flex-1 py-2 px-3 rounded text-sm font-medium transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed ${
+                          userBet &&
+                          isLoggedIn &&
+                          user?.id &&
+                          userBet.option === prediction.option_a
+                            ? "bg-purple-500 text-white hover:bg-purple-600 border-2 border-purple-300"
+                            : "bg-green-500 text-white hover:bg-green-600"
+                        }`}
+                        disabled={isExpired || !isLoggedIn || !isConnected}
                         onClick={() => {
-                          if (!isLoggedIn) {
-                            setShowLoginModal(true);
-                          } else {
-                            // 베팅 로직 구현
-                            alert(`${prediction.option_a}에 베팅하시겠습니까?`);
-                          }
+                          handleBettingOptionClick(
+                            prediction,
+                            prediction.option_a
+                          );
                         }}
                       >
-                        ✅ {prediction.option_a}
+                        {userBet &&
+                        isLoggedIn &&
+                        user?.id &&
+                        userBet.option === prediction.option_a
+                          ? "🎯"
+                          : "✅"}{" "}
+                        {prediction.option_a}
                       </button>
                       <button
-                        className="flex-1 bg-red-500 text-white py-2 px-3 rounded text-sm font-medium hover:bg-red-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
-                        disabled={isExpired || !isLoggedIn}
+                        className={`flex-1 py-2 px-3 rounded text-sm font-medium transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed ${
+                          userBet &&
+                          isLoggedIn &&
+                          user?.id &&
+                          userBet.option === prediction.option_b
+                            ? "bg-purple-500 text-white hover:bg-purple-600 border-2 border-purple-300"
+                            : "bg-red-500 text-white hover:bg-red-600"
+                        }`}
+                        disabled={isExpired || !isLoggedIn || !isConnected}
                         onClick={() => {
-                          if (!isLoggedIn) {
-                            setShowLoginModal(true);
-                          } else {
-                            // 베팅 로직 구현
-                            alert(`${prediction.option_b}에 베팅하시겠습니까?`);
-                          }
+                          handleBettingOptionClick(
+                            prediction,
+                            prediction.option_b
+                          );
                         }}
                       >
-                        ❌ {prediction.option_b}
+                        {userBet &&
+                        isLoggedIn &&
+                        user?.id &&
+                        userBet.option === prediction.option_b
+                          ? "🎯"
+                          : "❌"}{" "}
+                        {prediction.option_b}
                       </button>
                     </div>
                   </div>
@@ -1522,6 +2428,203 @@ export default function SportsNewsApp() {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* 완료된 예측 이벤트들 (상금 Claim 가능) */}
+          {console.log(
+            "Completed predictions 렌더링 조건:",
+            completedPredictions.length > 0,
+            "개수:",
+            completedPredictions.length
+          )}
+          <div className="mt-8">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">
+              🏆 Completed Events - Claim Your Rewards
+            </h3>
+            {completedPredictions.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {completedPredictions.map((prediction: any) => {
+                  const userBet =
+                    userBets[prediction.id] || userBets[String(prediction.id)];
+                  const poolInfo = poolInfos[prediction.id];
+
+                  console.log("Completed 이벤트 디버깅:", {
+                    predictionId: prediction.id,
+                    predictionIdType: typeof prediction.id,
+                    userBets: userBets,
+                    userBet: userBet,
+                    userBetsKeys: Object.keys(userBets),
+                  });
+
+                  // Pool 정보에서 퍼센티지 계산
+                  const totalBets = poolInfo
+                    ? poolInfo.totals.reduce(
+                        (sum: number, total: number) => sum + total,
+                        0
+                      )
+                    : 0;
+                  const optionAPercentage =
+                    poolInfo && totalBets > 0
+                      ? Math.round((poolInfo.totals[0] / totalBets) * 100)
+                      : 0;
+                  const optionBPercentage =
+                    poolInfo && totalBets > 0
+                      ? Math.round((poolInfo.totals[1] / totalBets) * 100)
+                      : 0;
+
+                  return (
+                    <div
+                      key={prediction.id}
+                      className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                    >
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="bg-blue-100 text-blue-600 px-2 py-1 rounded text-xs font-medium">
+                            {prediction.game_id}
+                          </span>
+                          <span className="bg-blue-100 text-blue-600 px-2 py-1 rounded text-xs font-medium">
+                            Completed
+                          </span>
+                        </div>
+                        <span className="text-xs text-gray-500">
+                          {new Date(prediction.createdAt).toLocaleString()}
+                        </span>
+                      </div>
+
+                      <h4 className="font-semibold text-gray-900 mb-3">
+                        {prediction.prediction}
+                      </h4>
+
+                      <div className="space-y-2 mb-4">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-700">
+                            {prediction.option_a}
+                          </span>
+                          <span className="font-semibold text-green-600">
+                            {poolInfo ? `${optionAPercentage}%` : "..."}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-700">
+                            {prediction.option_b}
+                          </span>
+                          <span className="font-semibold text-red-600">
+                            {poolInfo ? `${optionBPercentage}%` : "..."}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* 사용자 베팅 정보 및 Claim 버튼 */}
+                      {userBet && (
+                        <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-3">
+                          <div className="text-sm text-purple-700 mb-2">
+                            🎯 Your Bet: {userBet.option} (${userBet.amount})
+                          </div>
+
+                          {/* 정답/오답 판단 및 표시 */}
+                          {(() => {
+                            // 정답 인덱스 확인 (0: option_a, 1: option_b)
+                            const correctOptionIndex = poolInfo?.resultIdx;
+                            const userBetOption = userBet.option;
+                            const isCorrect =
+                              (correctOptionIndex === 0 &&
+                                userBetOption === prediction.option_a) ||
+                              (correctOptionIndex === 1 &&
+                                userBetOption === prediction.option_b);
+
+                            console.log("정답/오답 판단 디버깅:", {
+                              predictionId: prediction.id,
+                              poolInfo: poolInfo,
+                              correctOptionIndex: correctOptionIndex,
+                              userBetOption: userBetOption,
+                              optionA: prediction.option_a,
+                              optionB: prediction.option_b,
+                            });
+
+                            if (isCorrect) {
+                              // 정답인 경우
+                              return (
+                                <div className="text-sm text-green-600 mb-2">
+                                  ✅ Correct Answer! You can claim rewards.
+                                </div>
+                              );
+                            }
+                            // 오답인 경우는 메시지 표시하지 않음
+                          })()}
+
+                          <button
+                            className="w-full bg-purple-500 text-white py-2 px-3 rounded text-sm font-medium hover:bg-purple-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                            disabled={!isLoggedIn || !isConnected}
+                            onClick={async () => {
+                              if (!address) return;
+
+                              try {
+                                // 먼저 이미 claim했는지 확인
+                                const hasClaimed = await hasUserClaimed({
+                                  poolId: prediction.pool_id,
+                                  userAddress: address,
+                                });
+
+                                if (hasClaimed) {
+                                  alert(
+                                    "You have already claimed your rewards for this event."
+                                  );
+                                  return;
+                                }
+
+                                // claim 함수 호출
+                                const result = await claim({
+                                  poolId: prediction.pool_id,
+                                });
+
+                                if (result.success) {
+                                  alert(
+                                    `Successfully claimed your rewards!\nTransaction: ${result.digest}`
+                                  );
+                                  // 베팅 정보 새로고침
+                                  if (user?.id) {
+                                    await loadUserBets(user.id);
+                                  }
+                                } else {
+                                  alert(
+                                    `Failed to claim rewards: ${result.error}`
+                                  );
+                                }
+                              } catch (error) {
+                                console.error("Claim error:", error);
+                                alert(
+                                  "Error claiming rewards. Please try again."
+                                );
+                              }
+                            }}
+                          >
+                            💰 Claim Rewards
+                          </button>
+                        </div>
+                      )}
+
+                      {!userBet && (
+                        <div className="text-center py-4 text-gray-500">
+                          <p className="text-sm">
+                            You didn't participate in this event
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-12 text-gray-500">
+                <div className="text-4xl mb-4">🏆</div>
+                <p className="text-lg font-medium mb-2">
+                  No completed events yet
+                </p>
+                <p className="text-sm">
+                  Completed events will appear here for reward claiming!
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -2181,6 +3284,435 @@ export default function SportsNewsApp() {
         onClose={() => setShowCreatePredictionModal(false)}
         onSubmit={handleCreatePrediction}
       />
+
+      {/* 베팅 모달 */}
+      {showBettingModal && selectedBettingPrediction && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-8 w-96 max-w-md mx-4">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-gray-900">Place Bet</h2>
+              <button
+                onClick={() => setShowBettingModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* 예측 정보 */}
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h3 className="font-semibold text-gray-900 mb-2">
+                  {selectedBettingPrediction.prediction}
+                </h3>
+                <div className="flex justify-between text-sm text-gray-600">
+                  <span>Selected Option:</span>
+                  <span className="font-medium text-blue-600">
+                    {selectedBettingOption}
+                  </span>
+                </div>
+              </div>
+
+              {/* USDC 잔고 */}
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">USDC Balance:</span>
+                  <span className="font-semibold text-blue-600">
+                    {usdcBalance.toFixed(2)} USDC
+                  </span>
+                </div>
+              </div>
+
+              {/* 베팅 금액 입력 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Bet Amount (USDC)
+                </label>
+                <input
+                  type="number"
+                  value={bettingAmount}
+                  onChange={(e) => setBettingAmount(e.target.value)}
+                  placeholder="Enter amount"
+                  min="0"
+                  step="0.01"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                {bettingAmount && parseFloat(bettingAmount) > usdcBalance && (
+                  <p className="text-red-500 text-sm mt-1">
+                    Insufficient balance
+                  </p>
+                )}
+              </div>
+
+              {/* 베팅 버튼 */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowBettingModal(false)}
+                  className="flex-1 bg-gray-300 text-gray-700 py-3 rounded-lg font-medium hover:bg-gray-400 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    if (
+                      !selectedBettingPrediction ||
+                      !selectedBettingOption ||
+                      !bettingAmount
+                    ) {
+                      alert("베팅 정보가 올바르지 않습니다.");
+                      return;
+                    }
+
+                    const poolInfo = poolInfos[selectedBettingPrediction.id];
+                    if (!poolInfo || !poolInfo.poolId) {
+                      alert("Pool 정보를 찾을 수 없습니다.");
+                      return;
+                    }
+
+                    // 옵션 인덱스 결정 (option_a = 0, option_b = 1)
+                    const optionIdx =
+                      selectedBettingOption ===
+                      selectedBettingPrediction.option_a
+                        ? 0
+                        : 1;
+                    const amount = parseFloat(bettingAmount);
+
+                    try {
+                      console.log("베팅 실행 시작:", {
+                        poolId: poolInfo.poolId,
+                        optionIdx,
+                        amount,
+                        selectedOption: selectedBettingOption,
+                      });
+
+                      const result = await placeBet({
+                        poolId: poolInfo.poolId,
+                        optionIdx,
+                        amount,
+                      });
+
+                      if (result.success) {
+                        // 데이터베이스에 베팅 정보 저장
+                        try {
+                          const token = localStorage.getItem("access_token");
+                          if (token) {
+                            const betResponse = await fetch(
+                              "http://localhost:8000/api/v1/bets/",
+                              {
+                                method: "POST",
+                                headers: {
+                                  Authorization: `Bearer ${token}`,
+                                  "Content-Type": "application/json",
+                                },
+                                body: JSON.stringify({
+                                  prediction_id: selectedBettingPrediction.id,
+                                  user_address: address,
+                                  option: selectedBettingOption,
+                                  amount: amount,
+                                  transaction_hash: result.digest,
+                                  pool_id: poolInfo.poolId,
+                                }),
+                              }
+                            );
+
+                            if (betResponse.ok) {
+                              console.log(
+                                "베팅 정보가 데이터베이스에 저장되었습니다."
+                              );
+                            } else {
+                              console.error(
+                                "베팅 정보 저장 실패:",
+                                betResponse.status
+                              );
+                            }
+                          }
+                        } catch (dbError) {
+                          console.error("베팅 정보 저장 오류:", dbError);
+                        }
+
+                        // 사용자 베팅 정보 업데이트
+                        setUserBets((prev) => ({
+                          ...prev,
+                          [selectedBettingPrediction.id]: {
+                            option: selectedBettingOption,
+                            amount: amount,
+                            timestamp: Date.now(),
+                          },
+                        }));
+
+                        alert(
+                          `베팅이 성공적으로 완료되었습니다!\n트랜잭션: ${result.digest}`
+                        );
+                        setShowBettingModal(false);
+                        // 베팅 후 Pool 정보 새로고침
+                        await loadPoolInfos([selectedBettingPrediction]);
+                        // USDC 잔고 새로고침
+                        if (address) {
+                          await getUsdcBalance(address);
+                        }
+                      } else {
+                        alert(`베팅 실패: ${result.error}`);
+                      }
+                    } catch (error) {
+                      console.error("베팅 실행 오류:", error);
+                      alert(`베팅 중 오류가 발생했습니다: ${error}`);
+                    }
+                  }}
+                  disabled={
+                    !bettingAmount ||
+                    parseFloat(bettingAmount) <= 0 ||
+                    parseFloat(bettingAmount) > usdcBalance
+                  }
+                  className="flex-1 bg-blue-500 text-white py-3 rounded-lg font-medium hover:bg-blue-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                >
+                  Place Bet
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 결과 설정 모달 */}
+      {showResultModal && selectedEndPrediction && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-8 w-full max-w-lg mx-4">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-gray-900">
+                {selectedEndPrediction.status === "approved"
+                  ? "End Match"
+                  : "Set Result"}
+              </h2>
+              <button
+                onClick={() => setShowResultModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* 예측 정보 */}
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h3 className="font-semibold text-gray-900 mb-2">
+                  {selectedEndPrediction.prediction}
+                </h3>
+                <div className="text-sm text-gray-600 break-all space-y-2">
+                  <div>
+                    Pool ID:{" "}
+                    <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">
+                      {selectedEndPrediction.pool_id}
+                    </span>
+                  </div>
+                  {selectedEndPrediction.poolInfo?.matchId && (
+                    <div>
+                      Match ID:{" "}
+                      <span className="font-mono text-xs bg-blue-100 px-2 py-1 rounded">
+                        {selectedEndPrediction.poolInfo.matchId}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 승리 옵션 선택 (ended 상태일 때만 표시) */}
+              {selectedEndPrediction.status === "ended" && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Select Winning Option:
+                  </label>
+                  <div className="space-y-2">
+                    <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                      <input
+                        type="radio"
+                        name="winningOption"
+                        value={selectedEndPrediction.option_a}
+                        checked={
+                          selectedWinningOption ===
+                          selectedEndPrediction.option_a
+                        }
+                        onChange={(e) =>
+                          setSelectedWinningOption(e.target.value)
+                        }
+                        className="mr-3"
+                      />
+                      <span className="text-sm font-medium text-green-600">
+                        ✅ {selectedEndPrediction.option_a}
+                      </span>
+                    </label>
+                    <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                      <input
+                        type="radio"
+                        name="winningOption"
+                        value={selectedEndPrediction.option_b}
+                        checked={
+                          selectedWinningOption ===
+                          selectedEndPrediction.option_b
+                        }
+                        onChange={(e) =>
+                          setSelectedWinningOption(e.target.value)
+                        }
+                        className="mr-3"
+                      />
+                      <span className="text-sm font-medium text-red-600">
+                        ❌ {selectedEndPrediction.option_b}
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* 확인 버튼 */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowResultModal(false)}
+                  className="flex-1 bg-gray-300 text-gray-700 py-3 rounded-lg font-medium hover:bg-gray-400 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    // ended 상태일 때만 승리 옵션 선택 검증
+                    if (
+                      selectedEndPrediction.status === "ended" &&
+                      !selectedWinningOption
+                    ) {
+                      alert("승리 옵션을 선택해주세요.");
+                      return;
+                    }
+
+                    // 승리 옵션 인덱스 결정
+                    const winningOptionIndex =
+                      selectedWinningOption === selectedEndPrediction.option_a
+                        ? 0
+                        : 1;
+
+                    try {
+                      console.log("매치 종료 시작:", {
+                        poolId: selectedEndPrediction.pool_id,
+                        winningOptionIndex,
+                        selectedOption: selectedWinningOption,
+                      });
+
+                      // 상태에 따라 다른 함수 호출
+                      let result;
+                      if (selectedEndPrediction.status === "approved") {
+                        // 모달에서 미리 가져온 matchId 사용
+                        const matchId = selectedEndPrediction.poolInfo?.matchId;
+                        if (!matchId) {
+                          alert(
+                            "Match ID를 찾을 수 없습니다. 모달을 다시 열어주세요."
+                          );
+                          return;
+                        }
+                        console.log(
+                          "End Match 실행 - Registry ID:",
+                          REGISTRY_ID,
+                          "Pool ID:",
+                          selectedEndPrediction.pool_id,
+                          "Match ID:",
+                          matchId
+                        );
+                        result = await startMatch({
+                          registryId: REGISTRY_ID,
+                          poolId: selectedEndPrediction.pool_id,
+                          matchId: matchId,
+                        });
+                      } else {
+                        // ended 상태일 때 set_result 호출
+                        const matchId = selectedEndPrediction.poolInfo?.matchId;
+                        if (!matchId) {
+                          alert(
+                            "Match ID를 찾을 수 없습니다. 모달을 다시 열어주세요."
+                          );
+                          return;
+                        }
+                        console.log(
+                          "Set Result 실행 - Registry ID:",
+                          REGISTRY_ID,
+                          "Pool ID:",
+                          selectedEndPrediction.pool_id,
+                          "Match ID:",
+                          matchId,
+                          "Result Index:",
+                          winningOptionIndex
+                        );
+                        result = await setResult({
+                          registryId: REGISTRY_ID,
+                          poolId: selectedEndPrediction.pool_id,
+                          matchId: matchId,
+                          resultIdx: winningOptionIndex,
+                        });
+                      }
+
+                      if (result.success) {
+                        // 데이터베이스에서 상태 업데이트
+                        try {
+                          const token = localStorage.getItem("access_token");
+                          if (token) {
+                            const newStatus =
+                              selectedEndPrediction.status === "approved"
+                                ? "ended"
+                                : "completed";
+                            const statusResponse = await fetch(
+                              `http://localhost:8000/api/v1/predictions/${selectedEndPrediction.id}/status`,
+                              {
+                                method: "PUT",
+                                headers: {
+                                  Authorization: `Bearer ${token}`,
+                                  "Content-Type": "application/json",
+                                },
+                                body: JSON.stringify({ status: newStatus }),
+                              }
+                            );
+
+                            if (statusResponse.ok) {
+                              console.log(
+                                `예측 이벤트 상태가 ${newStatus}로 업데이트되었습니다.`
+                              );
+                            } else {
+                              console.error(
+                                "상태 업데이트 실패:",
+                                statusResponse.status
+                              );
+                            }
+                          }
+                        } catch (statusError) {
+                          console.error("상태 업데이트 오류:", statusError);
+                        }
+
+                        alert(
+                          `매치가 성공적으로 종료되었습니다!\n트랜잭션: ${result.digest}\n\n이제 "Set Result" 버튼을 클릭해서 정답을 설정하세요.`
+                        );
+                        setShowResultModal(false);
+                        setSelectedWinningOption("");
+                        // 예측 이벤트 목록 새로고침
+                        await loadPredictions();
+                      } else {
+                        alert(
+                          `매치 종료 실패: ${result.error}\n\n잠시 후 다시 시도해보세요.`
+                        );
+                      }
+                    } catch (error) {
+                      console.error("매치 종료 오류:", error);
+                      alert(`매치 종료 중 오류가 발생했습니다: ${error}`);
+                    }
+                  }}
+                  disabled={
+                    selectedEndPrediction.status === "ended" &&
+                    !selectedWinningOption
+                  }
+                  className="flex-1 bg-red-500 text-white py-3 rounded-lg font-medium hover:bg-red-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                >
+                  {selectedEndPrediction.status === "approved"
+                    ? "End Match"
+                    : "Set Result"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -5,7 +5,7 @@
 
 import json
 from sqlalchemy.orm import Session
-from app.models.database import engine, SessionLocal, create_tables, News, CommunityPost, LeagueStanding, User, PredictionEvent
+from app.models.database import engine, SessionLocal, create_tables, News, CommunityPost, LeagueStanding, User, PredictionEvent, PredictionScore
 from app.schemas.news import NewsCreate
 from app.schemas.community import CommunityPostCreate
 from app.schemas.standings import LeagueStandingCreate
@@ -28,6 +28,7 @@ def insert_sample_data():
         db.query(LeagueStanding).delete()
         db.query(User).delete()
         db.query(PredictionEvent).delete()
+        db.query(PredictionScore).delete()
         db.commit()
         
         # 뉴스 데이터 삽입 (main.tsx의 모든 데이터)
@@ -453,7 +454,7 @@ def insert_sample_data():
         db.add(normal_user)
 
          # 일반 사용자 생성
-        normal_user = User(
+        test_user1 = User(
             username="user1",
             email="user1@example.com",
             hashed_password=get_password_hash("1234"),
@@ -462,10 +463,10 @@ def insert_sample_data():
             is_superuser=False,
             is_admin=False
         )
-        db.add(normal_user)
+        db.add(test_user1)
 
          # 일반 사용자 생성
-        normal_user = User(
+        test_user2 = User(
             username="user2",
             email="user2@example.com",
             hashed_password=get_password_hash("1234"),
@@ -474,95 +475,119 @@ def insert_sample_data():
             is_superuser=False,
             is_admin=False
         )
-        db.add(normal_user)
+        db.add(test_user2)
+
+          # 일반 사용자 생성
+        test_user3 = User(
+            username="user3",
+            email="user3@example.com",
+            hashed_password=get_password_hash("1234"),
+            full_name="Test User3",
+            is_active=True,
+            is_superuser=False,
+            is_admin=False
+        )
+        db.add(test_user3)
+
+          # 일반 사용자 생성
+        test_user4 = User(
+            username="user4",
+            email="user4@example.com",
+            hashed_password=get_password_hash("1234"),
+            full_name="Test User4",
+            is_active=True,
+            is_superuser=False,
+            is_admin=False
+        )
+        db.add(test_user4)
         
         # 하드코딩된 예측 이벤트들 추가
-        print("Inserting hardcoded prediction events...")
-        from datetime import datetime, timedelta
+        # print("Inserting hardcoded prediction events...")
+        # from datetime import datetime, timedelta
         
-        hardcoded_predictions = [
-            {
-                "game_id": "MANCITY_ARSENAL_001",
-                "prediction": "Manchester City will beat Arsenal 2-1",
-                "option_a": "Manchester City Win",
-                "option_b": "Arsenal Win",
-                "duration": 48,
-                "status": "approved"
-            },
-            {
-                "game_id": "MBAPPE_REAL_002", 
-                "prediction": "Kylian Mbappe will transfer to Real Madrid in summer 2025",
-                "option_a": "Will Transfer",
-                "option_b": "Will Not Transfer",
-                "duration": 72,
-                "status": "approved"
-            },
-            {
-                "game_id": "SON_TOTTENHAM_003",
-                "prediction": "Son Heung-min will stay at Tottenham for 2025-26 season",
-                "option_a": "Will Stay",
-                "option_b": "Will Leave",
-                "duration": 96,
-                "status": "approved"
-            },
-            {
-                "game_id": "CHELSEA_CL_004",
-                "prediction": "Chelsea will qualify for Champions League in 2024-25 season",
-                "option_a": "Will Qualify",
-                "option_b": "Will Not Qualify",
-                "duration": 120,
-                "status": "approved"
-            },
-            {
-                "game_id": "LIVERPOOL_PL_005",
-                "prediction": "Liverpool will win Premier League in 2024-25 season",
-                "option_a": "Will Win",
-                "option_b": "Will Not Win",
-                "duration": 144,
-                "status": "approved"
-            },
-            {
-                "game_id": "PEP_MANCITY_006",
-                "prediction": "Pep Guardiola will extend contract with Manchester City in 2025",
-                "option_a": "Will Extend",
-                "option_b": "Will Leave",
-                "duration": 168,
-                "status": "approved"
-            },
-            {
-                "game_id": "BARCELONA_LALIGA_007",
-                "prediction": "Barcelona will win La Liga in 2024-25 season",
-                "option_a": "Will Win",
-                "option_b": "Will Not Win",
-                "duration": 192,
-                "status": "approved"
-            },
-            {
-                "game_id": "JUVENTUS_SERIE_008",
-                "prediction": "Juventus will finish in top 4 of Serie A in 2024-25 season",
-                "option_a": "Top 4 Finish",
-                "option_b": "Outside Top 4",
-                "duration": 216,
-                "status": "approved"
-            },
+        # hardcoded_predictions = [
+        #     {
+        #         "game_id": "MANCITY_ARSENAL_001",
+        #         "prediction": "Manchester City will beat Arsenal 2-1",
+        #         "option_a": "Manchester City Win",
+        #         "option_b": "Arsenal Win",
+        #         "duration": 48,
+        #         "status": "approved"
+        #     },
+        #     {
+        #         "game_id": "MBAPPE_REAL_002", 
+        #         "prediction": "Kylian Mbappe will transfer to Real Madrid in summer 2025",
+        #         "option_a": "Will Transfer",
+        #         "option_b": "Will Not Transfer",
+        #         "duration": 72,
+        #         "status": "approved"
+        #     },
+        #     {
+        #         "game_id": "SON_TOTTENHAM_003",
+        #         "prediction": "Son Heung-min will stay at Tottenham for 2025-26 season",
+        #         "option_a": "Will Stay",
+        #         "option_b": "Will Leave",
+        #         "duration": 96,
+        #         "status": "approved"
+        #     },
+        #     {
+        #         "game_id": "CHELSEA_CL_004",
+        #         "prediction": "Chelsea will qualify for Champions League in 2024-25 season",
+        #         "option_a": "Will Qualify",
+        #         "option_b": "Will Not Qualify",
+        #         "duration": 120,
+        #         "status": "approved"
+        #     },
+        #     {
+        #         "game_id": "LIVERPOOL_PL_005",
+        #         "prediction": "Liverpool will win Premier League in 2024-25 season",
+        #         "option_a": "Will Win",
+        #         "option_b": "Will Not Win",
+        #         "duration": 144,
+        #         "status": "approved"
+        #     },
+        #     {
+        #         "game_id": "PEP_MANCITY_006",
+        #         "prediction": "Pep Guardiola will extend contract with Manchester City in 2025",
+        #         "option_a": "Will Extend",
+        #         "option_b": "Will Leave",
+        #         "duration": 168,
+        #         "status": "approved"
+        #     },
+        #     {
+        #         "game_id": "BARCELONA_LALIGA_007",
+        #         "prediction": "Barcelona will win La Liga in 2024-25 season",
+        #         "option_a": "Will Win",
+        #         "option_b": "Will Not Win",
+        #         "duration": 192,
+        #         "status": "approved"
+        #     },
+        #     {
+        #         "game_id": "JUVENTUS_SERIE_008",
+        #         "prediction": "Juventus will finish in top 4 of Serie A in 2024-25 season",
+        #         "option_a": "Top 4 Finish",
+        #         "option_b": "Outside Top 4",
+        #         "duration": 216,
+        #         "status": "approved"
+        #     },
         
-        ]
+        # ]
         
-        for pred_data in hardcoded_predictions:
-            expires_at = datetime.utcnow() + timedelta(hours=pred_data["duration"])
-            prediction = PredictionEvent(
-                game_id=pred_data["game_id"],
-                prediction=pred_data["prediction"],
-                option_a=pred_data["option_a"],
-                option_b=pred_data["option_b"],
-                duration=pred_data["duration"],
-                creator_id=1,  # admin_user.id 대신 직접 1 사용
-                status=pred_data["status"],
-                expires_at=expires_at,
-                total_bets=0,
-                total_amount=0
-            )
-            db.add(prediction)
+        # for pred_data in hardcoded_predictions:
+        #     expires_at = datetime.utcnow() + timedelta(hours=pred_data["duration"])
+        #     prediction = PredictionEvent(
+        #         game_id=pred_data["game_id"],
+        #         prediction=pred_data["prediction"],
+        #         option_a=pred_data["option_a"],
+        #         option_b=pred_data["option_b"],
+        #         duration=pred_data["duration"],
+        #         creator_id=1,  # admin_user.id 대신 직접 1 사용
+        #         status=pred_data["status"],
+        #         expires_at=expires_at,
+        #         total_bets=0,
+        #         total_amount=0
+        #     )
+        #     db.add(prediction)
         
         db.commit()
         print("Sample data inserted successfully!")
